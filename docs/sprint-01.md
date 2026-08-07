@@ -26,10 +26,11 @@ validación en el spike), ni tocar el POC existente.
 | Rol | Responsable | Carga esperada en el sprint |
 |---|---|---|
 | Product Manager | (vos) | Convoca sesión, redacta "Definición de escala v1", corre bloqueos |
-| Dirección de Desarrollo | Director técnico | Participa en sesión, confirma equipo del spike, revisa DoD técnico |
-| Diseño de combate | (vos, PM) — rol asumido temporalmente | Entrega documento de combate + definición de variedad de tipos |
-| Dirección de producto | (vos, PM) — mismo rol, sin persona separada | Co-decide postura sobre multijugador (T6) |
-| Negocio / Marketing | A designar (solo si aplica) | Aporta spec de hardware si existe una definida para otros títulos |
+| Dirección de Desarrollo | (vos) — mismo rol | Confirma decisiones técnicas del spike, revisa DoD técnico |
+| Diseño de combate | (vos) — rol asumido temporalmente | Entrega documento de combate + definición de variedad de tipos |
+| Dirección de producto | (vos) — mismo rol | Co-decide postura sobre multijugador (T6) |
+| Negocio / Marketing | No aplica | Confirmado: no hay otro título del estudio con spec de hardware para contrastar |
+| Equipo técnico del spike (T7) | (vos), con soporte de Claude Code para el hot path de GDExtension | Sin experiencia previa en GDExtension/C++/`godot-rust` — se cubre leyendo lo indispensable de bindings, apoyado en asistencia de IA para la implementación |
 
 > **#Auditor — [RESUELTO 06-ago]:** "Dirección de producto" queda confirmado como
 > el mismo PM, sin persona separada — ya no hace falta invitarlo aparte a T1.
@@ -126,10 +127,10 @@ Primero: buscar si el estudio ya tiene una spec de hardware mínimo definida par
 otro título — reusarla si aplica. Si no existe, definirla ahora junto con
 Negocio/Marketing (CPU, GPU, RAM mínimos objetivo).
 
-**Decisión tomada (PM, 06-ago):** gama media — CPU 4 núcleos moderno (i5/Ryzen 5
-o equivalente), GPU equivalente a GTX 1660 / RX 580, 8GB RAM. Queda como borrador
-cerrado; si en T1 el estudio ya tiene una spec definida para otro título, se ajusta
-ahí — no se define de cero.
+**Decisión tomada (PM, 06-ago) — CERRADA:** gama media — CPU 4 núcleos moderno
+(i5/Ryzen 5 o equivalente), GPU equivalente a GTX 1660 / RX 580, 8GB RAM.
+Confirmado que no hay otro título del estudio con spec propia para reusar (no
+aplica Negocio/Marketing) — esta spec queda como definitiva, no como borrador.
 
 **Criterio de aceptación:** documento corto (puede ser media página) con la spec
 final, listo para entrar a T9.
@@ -174,29 +175,36 @@ no es la postura de partida.
 ---
 
 ### T7 — Aprobación formal del spike y confirmación de equipo
-**Dueño:** PM (aprobación) + Dirección de Desarrollo (equipo)
-**Cuándo:** día 3–4
+**Dueño:** vos, en ambos roles (PM aprueba / Dirección de Desarrollo confirma equipo)
+**Cuándo:** Día 2 (aprobación) — ya no hace falta esperar a Día 3-4, ver estado abajo
 **Depende de:** T1 (necesita el número objetivo para dimensionar el spike)
 
 Dos partes:
 
-1. PM aprueba formalmente el spike de 1–2 semanas (Sprint 2–3) — el director pidió
-   esto explícitamente antes de que cualquier fecha entre a un roadmap público.
-2. Dirección de Desarrollo confirma 1–2 devs senior con dedicación exclusiva,
-   disponibles el día 1 de Sprint 2.
+1. Aprobar formalmente el spike de 1–2 semanas (Sprint 2–3) — no comprometer
+   fecha de roadmap sin esto.
+2. Confirmar el equipo del spike, dedicación exclusiva desde día 1 de Sprint 2.
 
-**Estado (PM, 06-ago):** aprobación formal pospuesta a propósito — el PM prefiere
-ver el resultado de T1 (en particular T2, el número objetivo) antes de comprometer
-el marco de 1–2 semanas. Queda agendada para el Día 2 (lun 10-ago), inmediatamente
-después de que cierre T1, no más tarde.
+**Estado (PM, 06-ago):**
+- Aprobación formal (parte 1) pospuesta a propósito hasta ver el resultado de T1
+  (en particular T2, el número objetivo). Agendada para el Día 2 (lun 10-ago),
+  inmediatamente después de que cierre T1.
+- Equipo (parte 2): **confirmado — desarrollador único, sin otro dev senior que
+  sumar.** La ruta GDExtension del spike se apoya en asistencia de Claude Code
+  para la implementación en C++/Rust, dado que no hay experiencia previa propia;
+  el trabajo humano se concentra en leer y validar lo indispensable de bindings
+  de Godot, no en escribir el binding desde cero sin apoyo. Esto reduce (no
+  elimina) el riesgo de sesgo por curva de aprendizaje señalado en
+  `directorsuggestions.md` — vale medir igual cuánto tiempo real consume esa
+  curva dentro del corte de 10 días hábiles del spike.
 
-**Criterio de aceptación:** nombres concretos confirmados, no "vemos quién está
-libre".
+**Criterio de aceptación:** aprobación registrada con fecha; confirmación de
+dedicación exclusiva del desarrollador único desde día 1 de Sprint 2.
 
 ---
 
 ### T8 — (Opcional, sin bloquear el sprint) Andamiaje de proyecto
-**Dueño:** Dirección de Desarrollo, si hay tiempo ocioso del equipo técnico
+**Dueño:** PM/dev único, si hay tiempo ocioso
 **Cuándo:** cualquier momento del sprint, no es prioridad
 
 Crear la estructura de carpetas propuesta en `directorsuggestions.md`
@@ -204,18 +212,12 @@ Crear la estructura de carpetas propuesta en `directorsuggestions.md`
 DoD del sprint — es trabajo de preparación opcional para no perder el primer día de
 Sprint 2 en setup.
 
-> **#Auditor:** verifiqué el estado del repositorio — hoy `/towerdefense` no tiene
-> control de versiones inicializado (sin `.git`, sin `.gitignore`). Esto no debería
-> viajar como parte de un ítem opcional "si hay tiempo ocioso". Con 1–2 devs
-> senior escribiendo código en paralelo desde el día 1 de Sprint 2 (`entity_store.gd`,
-> `spatial_hash.gd`, y potencialmente una rama GDExtension en paralelo), arrancar
-> sin git es la forma más barata de perder trabajo o pisarse entre sí. Además,
-> `.godot/imported` y `.godot/shader_cache` son artefactos generados que no deberían
-> commitearse — hace falta un `.gitignore` antes del primer commit, no después.
-> Recomiendo tratar "`git init` + `.gitignore` + primer commit del estado actual
-> del POC" como tarea obligatoria de Sprint 1 (no T8), independiente de si el
-> equipo técnico tiene tiempo ocioso o no. Es de costo casi nulo y de riesgo alto
-> si se omite.
+> **#Auditor — [RESUELTO 06-ago]:** repositorio git inicializado, `.gitignore`
+> agregado (excluye `.godot/`, y ya deja previsto espacio para artefactos de build
+> de GDExtension — `bin/`, `target/`, `*.o`, `*.so`, `*.dll`) y primer commit
+> hecho (98 archivos). De paso, al revisar `POC/assets/` antes de commitear
+> apareció un instalador de 84MB (`EpicInstaller-20.1.4.msi`) mezclado con los
+> assets reales — se eliminó, no pertenecía al proyecto. Queda cerrado.
 
 ---
 

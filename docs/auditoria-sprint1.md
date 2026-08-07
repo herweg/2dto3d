@@ -12,17 +12,18 @@ mañana tal como está escrito, o si hoy es el día para ajustar algo antes de e
 
 ## 00. Veredicto
 
-**El plan es de una calidad de proceso inusualmente alta — pero tiene tres huecos de
-cimientos sin resolver que el propio texto ya intuye y no cierra.** No son fallas de
-razonamiento técnico ni de secuenciación: son precondiciones que los documentos dan
-por sentadas ("Diseño de combate", "Dirección de producto", "el spike escribe código
-sobre esto") sin confirmar que existan hoy.
+**El plan es de una calidad de proceso inusualmente alta — pero tenía cuatro huecos
+de cimientos sin resolver que el propio texto ya intuía y no cerraba.** No eran
+fallas de razonamiento técnico ni de secuenciación: eran precondiciones que los
+documentos daban por sentadas ("Diseño de combate", "Dirección de producto", "el
+spike escribe código sobre esto") sin confirmar que existieran hoy.
 
-**Recomendación: arrancar Sprint 1 mañana como está planeado, pero cerrar hoy los
-cuatro puntos de la sección 03.** Ninguno requiere replanificar — todos son de
-"confirmar/hacer antes de las 9am", no de "rediseñar el plan". Dejé nota `#Auditor`
-en el punto exacto de cada documento donde aparece cada hueco; este archivo es el
-resumen ejecutable.
+**Actualización 06-ago, tarde — los cuatro puntos de la sección 03 están
+resueltos.** Se confirmó que es un proyecto de desarrollador único (cubre PM,
+Dirección de Desarrollo, Diseño de combate y Dirección de producto), lo cual
+resuelve 3.1 y 3.2 de raíz; se inicializó git con `.gitignore` y primer commit
+(3.3); y se fijó fecha de inicio (3.4, viernes 07-ago-2026). Detalle de cada uno
+en la sección 03. Sprint 1 arranca mañana sin bloqueantes de cimientos pendientes.
 
 ---
 
@@ -79,110 +80,90 @@ solo la sección 03 y decide "esto está mal planeado", se equivoca.
 
 ---
 
-## 03. Problemas de cimientos — resolver hoy, antes de Sprint 1
+## 03. Problemas de cimientos — estado al cierre del 06-ago
 
-Estos cuatro puntos ya tienen nota `#Auditor` en el documento donde aparecen. Los
-resumo acá con la razón por la que los considero bloqueantes de cimientos y no
-"riesgos a vigilar" — la diferencia es que **el propio DoD de Sprint 1 es
-matemáticamente imposible de cumplir si alguno sigue sin resolverse mañana.**
+Los cuatro puntos de esta sección quedaron resueltos hoy. Registro qué se
+encontró, por qué importaba, y cómo quedó cerrado — para que quede el rastro de
+la decisión, no solo el resultado.
 
-### 3.1 — El rol de Diseño de combate no está confirmado
-`sprint-01.md` — tabla de participantes
+### 3.1 — [RESUELTO] El rol de Diseño de combate no estaba confirmado
+El documento se auto-señalaba el riesgo ("es un bloqueante de día 1") pero ningún
+documento confirmaba que existiera una persona asignada, y T3/T5 —2 de las 9
+entregas del DoD— dependían exclusivamente de ese rol. **Resolución:** es un
+proyecto de desarrollador único; el rol lo cubre la misma persona que el resto.
+Nota abierta a futuro (no bloqueante): si más adelante se suma un diseñador de
+combate dedicado, vale una segunda revisión de la cifra de escala y del documento
+de combate antes de congelar `entity_store.gd`, ya que hoy la misma persona valida
+y aprueba sin una segunda voz que la contraste.
 
-El documento se auto-señala el riesgo ("es un bloqueante de día 1") pero ninguno de
-los cinco documentos confirma que exista una persona asignada. T3 (documento de
-combate) y T5 (variedad de tipos) — 2 de las 9 entregas del DoD — dependen
-exclusivamente de este rol, y T3 es la que congela el esquema de datos de
-`entity_store.gd` en Fase 2. Sin nombre confirmado hoy, Sprint 1 no puede cerrar su
-propio DoD tal como está escrito, sin importar qué tan bien salga todo lo demás.
+### 3.2 — [RESUELTO] "Dirección de producto" era dueño de una decisión pero no
+estaba invitado
+La postura sobre multijugador tenía como dueño declarado "PM + Dirección de
+producto" en dos documentos distintos, sin que esa persona apareciera nunca en la
+lista de convocados. **Resolución:** es la misma persona que el PM — no hay
+tercera voz que faltara invitar. Corregido en `sprint-01.md`.
 
-**Acción para hoy:** confirmar el nombre por escrito antes de convocar la sesión T1
-de mañana. Si no existe todavía, es una conversación de hoy con Dirección de
-Desarrollo/Producto, no algo que se resuelve "durante" el sprint.
+### 3.3 — [RESUELTO] No había control de versiones inicializado
+Verificado: no había `.git` ni `.gitignore`. **Resolución:** `git init` +
+`.gitignore` (excluye `.godot/`, y deja previsto espacio para artefactos de build
+de GDExtension) + commit inicial de 98 archivos. Hallazgo adicional durante la
+verificación: `POC/assets/` tenía un instalador de 84MB (`EpicInstaller-20.1.4.msi`)
+mezclado con los assets reales del juego — se eliminó antes de commitear, no
+pertenecía al proyecto.
 
-### 3.2 — "Dirección de producto" es dueño de una decisión pero no está invitado
-`poc-scale-action-plan.md` (tabla sección 01, fila 6) y `sprint-01.md` (tabla de
-participantes vs. dueño de T6)
+### 3.4 — [RESUELTO] La fecha de inicio del sprint seguía en "a confirmar"
+**Resolución:** fecha de inicio fijada en viernes 07-ago-2026, con el resto del
+cronograma de Sprint 1 (Días 2–5) derivado de esa fecha en `sprint-01.md` y
+`sprint-01-asignaciones.md`.
 
-La postura sobre multijugador tiene como dueño declarado "PM + Dirección de
-producto" en ambos documentos, pero ninguno de los dos incluye a esa persona en la
-lista de convocados a la sesión de 2 horas donde se toma esa decisión. O es un rol
-real que falta invitar, o es el mismo PM con otro sombrero y el documento debería
-decirlo así para no sugerir que hay una tercera voz que en los hechos no participa.
-
-**Acción para hoy:** aclarar si "Dirección de producto" es una persona distinta;
-si lo es, agregarla a la convocatoria de T1 antes de enviarla.
-
-### 3.3 — No hay control de versiones inicializado
-Verificado directamente: `/towerdefense` no tiene `.git` ni `.gitignore`.
-
-`sprint-01.md` trata la creación de la estructura de carpetas (`sim/`, `render/`,
-`data/`) como un ítem opcional (T8, "si hay tiempo ocioso"). Pero el problema no es
-la estructura de carpetas — es que **no hay git**. Desde el día 1 de Sprint 2, 1-2
-devs senior van a escribir código en paralelo (potencialmente sobre dos rutas,
-GDScript y GDExtension) sin ningún mecanismo de historial, branching ni respaldo.
-Es la forma más barata de perder trabajo real en este plan, y arreglarla hoy cuesta
-minutos.
-
-**Acción para hoy:** `git init`, `.gitignore` (excluir `.godot/imported` y
-`.godot/shader_cache`, que son artefactos generados), commit inicial del estado
-actual del POC. Esto no debería depender de "tiempo ocioso" — es infraestructura
-mínima, no una mejora opcional.
-
-### 3.4 — La fecha de inicio del sprint sigue en "a confirmar"
-`sprint-01.md`, encabezado
-
-Dado que el sprint arranca mañana, este campo debería decir la fecha concreta, no
-"a confirmar al aceptar este documento". Es menor comparado con 3.1–3.3, pero es la
-puerta de entrada del documento — si no está cerrado, tampoco está claro que el
-resto del documento esté formalmente aceptado todavía.
-
-**Acción para hoy:** fijar la fecha de inicio (mañana) explícitamente en el
-documento y comunicarla junto con la convocatoria de T1.
+### 3.5 — [Nuevo, no bloqueante] Contexto de equipo real
+Al resolver 3.1 y 3.2 surgió un dato que cambia la lectura del resto del plan:
+es un desarrollador único, no un estudio con roles separados. Esto no invalida
+nada de lo evaluado en la sección 02 (la disciplina de proceso sigue siendo
+correcta y vale la pena mantenerla aunque sea una sola persona autoimponiéndosela)
+pero sí cambia el riesgo de "GDExtension sin experiencia previa" señalado en
+`directorsuggestions.md`: se cubre con apoyo de Claude Code para la
+implementación, lo cual mitiga la curva de aprendizaje pero no la elimina — sigue
+valiendo medir en el spike cuánto tiempo se va en el flujo de trabajo con la
+herramienta versus en la arquitectura misma.
 
 ---
 
 ## 04. Riesgos a vigilar durante el sprint — no bloquean mañana
 
-Estos no impiden arrancar Sprint 1, pero conviene que alguien los tenga anotados
-para no descubrirlos recién en Sprint 2 o 3, cuando ya cuestan más resolver.
-
-- **Competencia en GDExtension/C++/Rust no confirmada.** Ningún documento verifica
-  que el equipo asignado al spike tenga experiencia previa con `godot-rust` o
-  bindings de GDExtension. Si no la tienen, la ruta B del spike mide una curva de
-  aprendizaje además de la arquitectura, dentro del mismo corte de 10 días hábiles
-  — puede sesgar el resultado sin que nadie lo note como tal. Ver nota en
-  `directorsuggestions.md`, sección 2.5.
-- **Riesgo de anclaje en la cifra 20.000/30.000.** Esa cifra nació como hipótesis
-  de ingeniería del director dentro de su propia propuesta de arquitectura, no como
-  un número de diseño de combate. Tratarla como "punto de partida de negociación"
-  es razonable, pero solo si Diseño de combate —posiblemente alguien recién
-  asignado, ver 3.1— tiene contexto real para objetarla en la sesión T1 y no la
-  ratifica por default. Vale la pena que quien facilite la sesión lo diga en voz
-  alta antes de presentarla.
-- **Disponibilidad real de los 1-2 devs senior para Sprint 2.** T7 confirma nombres
-  durante Sprint 1, lo cual está bien como tarea — pero ningún documento verifica
-  que esas personas no estén comprometidas en otro trabajo que habría que liberar
-  primero. Si hace falta destrabar a alguien de otro proyecto, mejor saberlo el
-  día 3 de Sprint 1 que el día 1 de Sprint 2.
+- **Competencia en GDExtension/C++/Rust — mitigada, no eliminada.** Confirmado:
+  sin experiencia previa, cubierta con apoyo de Claude Code para la
+  implementación. Reduce el riesgo de que la ruta B del spike mida solo una curva
+  de aprendizaje, pero conviene medir explícitamente en el spike cuánto tiempo se
+  va en el flujo de trabajo (build, hot-reload, superficie de la API) versus en la
+  arquitectura misma, para no confundir ambas cosas en el resultado.
+- **Riesgo de anclaje en la cifra 20.000/30.000 — vigente.** Esa cifra nació como
+  hipótesis de ingeniería del director dentro de su propia propuesta de
+  arquitectura, no como un número de diseño de combate. Con un desarrollador único
+  cubriendo también el rol de Diseño de combate (3.1), este riesgo se acentúa un
+  poco: no hay una segunda voz que la objete en la sesión T1. Vale la pena
+  contrastarla explícitamente contra lo que el gameplay real necesita al cerrar
+  T2, no solo ratificarla porque ya está escrita en un documento previo.
+- **Disponibilidad — ya no aplica.** Resuelto en 3.5: es un desarrollador único,
+  no hace falta liberar a nadie de otro proyecto.
 - **Sin herramienta de medición definida para el spike.** El plan pide "datos, no
   intuición" para el criterio de salida del spike, pero no define todavía cómo se
   va a medir fps/frame time de forma reproducible (profiler de Godot, logging
-  propio, hardware de referencia física vs. emulada). No bloquea Sprint 1, pero
-  conviene resolverlo antes del día 1 de Sprint 2 para no perder tiempo de spike en
-  tooling.
+  propio). No bloquea Sprint 1, pero conviene resolverlo antes del día 1 de
+  Sprint 2 para no perder tiempo de spike en tooling.
 
 ---
 
-## 05. Checklist accionable para hoy
+## 05. Checklist accionable — estado al cierre del 06-ago
 
-- [ ] Confirmar por escrito el nombre de la persona de Diseño de combate (3.1)
-- [ ] Aclarar si "Dirección de producto" es un rol separado; si lo es, sumarlo a la
-      convocatoria de T1 (3.2)
-- [ ] `git init` + `.gitignore` + commit inicial del POC actual (3.3)
-- [ ] Fijar y comunicar la fecha de inicio del sprint en `sprint-01.md` (3.4)
-- [ ] Enviar la convocatoria de la sesión T1 con hora concreta, ya con la lista de
-      invitados corregida
+- [x] Confirmar dueño de Diseño de combate (3.1) — desarrollador único
+- [x] Aclarar rol "Dirección de producto" (3.2) — mismo desarrollador único
+- [x] `git init` + `.gitignore` + commit inicial del POC actual (3.3)
+- [x] Fijar y comunicar la fecha de inicio del sprint (3.4) — vie 07-ago-2026
+- [ ] Bloquear en el calendario el horario de la sesión T1 (mañana, tarde)
 
-Con estos cinco puntos cerrados, no encuentro razón para no arrancar Sprint 1 mañana
-tal como está diseñado en `sprint-plan.md` y `sprint-01.md`.
+Con los cuatro puntos de cimientos cerrados, no encuentro razón para no arrancar
+Sprint 1 mañana tal como está diseñado en `sprint-plan.md` y `sprint-01.md`. Lo
+único operativo que queda para hoy es agendar el bloque de la sesión T1 en el
+calendario — el resto de T2–T9 se ejecuta durante la semana según
+`sprint-01-asignaciones.md`.

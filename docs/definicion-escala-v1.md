@@ -23,14 +23,14 @@ ratificarla por default sin contrastarla contra el gameplay real.
 
 ## Hardware mínimo objetivo (T4)
 
-**Estado: DECIDIDO (PM, 06-ago).**
+**Estado: CERRADO (PM, 06-ago).**
 
 - CPU: 4 núcleos, clase i5 / Ryzen 5 o equivalente moderno
 - GPU: equivalente a GTX 1660 / RX 580
 - RAM: 8 GB
 
-Gama media — sujeto a ajuste en T1 si el estudio ya tiene una spec definida para
-otro título (en ese caso se reusa esa, no esta).
+Gama media. Confirmado que no hay otro título del estudio con spec propia para
+reusar — queda definitiva, no sujeta a revisión en T1.
 
 ---
 
@@ -65,10 +65,14 @@ Reabrible en T1 si surge información nueva, pero no es la postura de partida.
 
 ## Aprobación del spike y equipo (T7)
 
-**Estado: PENDIENTE.** El PM pospuso a propósito la aprobación formal hasta ver el
-resultado de T1 (en particular, el número objetivo de T2). Se decide Día 2
-(lun 10-ago), inmediatamente después del cierre de T1. Dirección de Desarrollo
-confirma nombres de 1–2 devs senior con dedicación exclusiva en la misma fecha.
+**Equipo: CERRADO (PM, 06-ago).** Desarrollador único, sin otro dev senior que
+sumar. Sin experiencia previa en GDExtension/C++/`godot-rust` — se cubre con
+apoyo de Claude Code para la implementación de esa ruta; el trabajo humano se
+concentra en leer y validar lo indispensable de bindings de Godot.
+
+**Aprobación formal: PENDIENTE.** Pospuesta a propósito hasta ver el resultado de
+T1 (en particular, el número objetivo de T2). Se decide Día 2 (lun 10-ago),
+inmediatamente después del cierre de T1.
 
 ---
 
@@ -79,7 +83,8 @@ confirma nombres de 1–2 devs senior con dedicación exclusiva en la misma fech
 - [ ] Documento de combate v1 (T3)
 - [ ] Variedad de tipos de proyectil (T5)
 - [x] Postura sobre multijugador (T6)
-- [ ] Spike aprobado formalmente, equipo confirmado por nombre (T7)
+- [x] Equipo del spike confirmado (T7, parte equipo — desarrollador único + Claude Code)
+- [ ] Spike aprobado formalmente (T7, parte aprobación — se decide Día 2)
 
 Mientras haya un ítem sin marcar, este documento **no está cerrado** y Sprint 2 no
 arranca — regla explícita de `sprint-01.md`.

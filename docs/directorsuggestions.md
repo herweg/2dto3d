@@ -98,15 +98,15 @@ GDExtension (C++ o Rust vía `godot-rust`), dejando todo lo demás — armas, me
 oleadas, UI, definición de contenido — en GDScript. Es una escalada acotada, no una
 reescritura completa del juego en C++.
 
-> **#Auditor:** ningún documento de la cadena confirma que el equipo (los 1–2 devs
-> senior que se van a asignar al spike) tenga experiencia previa con GDExtension en
-> C++ o con `godot-rust`. Si no la tienen, la ruta B del spike no mide solo "¿esta
-> arquitectura escala?" sino que además absorbe una curva de aprendizaje de
-> bindings de Godot dentro de un corte duro de 10 días hábiles — eso puede sesgar
-> el resultado del spike (ruta GDExtension mal medida por falta de fluidez, no por
-> límite real de la técnica). Vale la pena que Dirección de Desarrollo confirme
-> esto al mismo tiempo que confirma nombres para el spike (T7 de `sprint-01.md`),
-> no descubrirlo recién al arrancar la ruta B en Sprint 2 o 3.
+> **#Auditor — [RESUELTO 06-ago, con nota]:** confirmado — es un desarrollador
+> único, sin experiencia previa en GDExtension/C++/`godot-rust`, que va a apoyarse
+> en Claude Code para la implementación de esa ruta. Esto mitiga el riesgo de
+> curva de aprendizaje frente a escribir los bindings a mano, pero no lo anula del
+> todo: dentro del corte de 10 días hábiles del spike, sigue valiendo la pena
+> medir explícitamente cuánto tiempo se va en iterar sobre la integración
+> GDScript↔GDExtension (build, hot-reload, superficie de la API) versus en la
+> arquitectura en sí, para no confundir "la técnica no escala" con "todavía no
+> afinamos el flujo de trabajo con la herramienta".
 
 ### 2.6 Qué se porta del POC tal cual
 
