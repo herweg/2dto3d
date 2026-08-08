@@ -33,6 +33,11 @@ const TOWER_TYPE_STATS := {
 ## "no hay línea de vista" con "el tipo no dispara". TOWER_TYPE_STATS arriba
 ## queda con los rangos reales para cuando se calibre el juego de verdad;
 ## poner esto en 0.0 (o borrar la línea) vuelve a usar esos valores tal cual.
+# TODO(calibración de combate): DEV_RANGE_OVERRIDE y DEV_FIRE_RATE_OVERRIDE
+# (ambas const, abajo) siguen activas desde la verificación de los 4 tipos de
+# proyectil y el stress test de gráficos/animación (docs/fase2-stress-test.md).
+# Poner las dos en 0.0 antes de calibrar el juego de verdad — mientras sigan
+# así, ninguna corrida refleja el balance real de TOWER_TYPE_STATS.
 const DEV_RANGE_OVERRIDE := 2000.0
 
 ## Mismo espíritu que DEV_RANGE_OVERRIDE, para la cadencia de disparo — usado

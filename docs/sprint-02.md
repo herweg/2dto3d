@@ -106,6 +106,11 @@ T4, no el hardware mínimo real. Trato estos números como **cota optimista**,
 no como el resultado final. Reporte visual completo (curva, capturas,
 metodología): ver artifact publicado en esta sesión de trabajo.
 
+> **Actualización (PM, 08-ago):** T4 se redefinió para coincidir con esta
+> misma máquina (ver `definicion-escala-v1.md`) — esta medición ya es sobre
+> hardware mínimo real, no una cota optimista. No hace falta remedirla en
+> otra máquina.
+
 - **Movimiento + render, sin colisión:** sostiene el pico completo del
   objetivo — **12.000 proyectiles + 3.000 enemigos simultáneos a ~80 fps**.
   Valida la mitad no-colisión de la arquitectura de `directorsuggestions.md`

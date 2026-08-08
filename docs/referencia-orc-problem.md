@@ -1,9 +1,12 @@
 # Referencia de diseño — captura de pantalla de un tower-defense de horda
 
-**Estado: RECONCILIADO (07-ago-2026)** en el checkpoint de Fase 2 — ver
+**Estado: RECONCILIADO (07-ago-2026), FORMALIZADO (08-ago-2026)** — ver
 `sprint-02.md`, sección "Insumo adicional reconciliado", para la resolución
-de los tres puntos abiertos de más abajo. `definicion-escala-v1.md` no se
-modificó — T2 queda igual, con nota explícita de por qué.
+original de los tres puntos abiertos de más abajo, y la firma compartida en
+el punto 2 para el registro formal que faltaba. `definicion-escala-v1.md` no
+se modificó en cuanto al modelo de juego — T2 (el número) queda igual, con
+nota explícita de por qué; T4 (hardware) sí se actualizó el 08-ago por una
+razón no relacionada, ver ese documento.
 **Por qué este documento existió separado antes de hoy:** llegó mientras el
 equipo estaba en medio de Ruta B (GDExtension) — no correspondía tocar
 alcance ni código mientras esa implementación estaba en curso. Quedó anotado
@@ -89,13 +92,24 @@ medición de Ruta A y movería el objetivo debajo de Ruta B a mitad de camino.
    que la arquitectura sostiene enemigos en ese orden de magnitud, y esto
    último ni se midió. Si se persigue en serio más adelante, es un spike
    nuevo, no una actualización de este documento.
-2. **Torres fijas + enemigos en carril: recomendado por el director para
-   Fase 2**, pendiente de confirmación explícita del lado de producto antes
-   de arrancar contenido real. No reemplaza automáticamente el modelo actual
-   por decisión de este documento — queda como recomendación con nombre y
-   apellido, no como hecho consumado.
-3. **Rediseño de la grilla sobre ambas poblaciones: no aplica por ahora**,
-   condicional a que (1) cambie en el futuro.
+2. **Torres fijas + enemigos en carril: adoptado para Fase 2.**
 
-Ninguna de las tres se decide en este documento — quedan explícitamente
-abiertas para el checkpoint.
+   > **Documentado por: Auditor (revisión retroactiva, 08-ago-2026).
+   > Autorizado por: PM (08-ago-2026).**
+   > Esta confirmación no quedó escrita en su momento — `fase2-motor-cristalizado.md`
+   > y el commit `89fbbd9` (`TowerStore`, `LaneEnemySystem`, `level_01.tres`)
+   > ya construyeron sobre este modelo, y el director firmó el checkpoint de
+   > motor como si estuviera resuelto, sin que existiera acá el registro
+   > explícito que este mismo documento pedía antes de arrancar contenido
+   > real. La decisión de producto (adoptar torres+carril) fue del PM; esta
+   > nota la deja escrita donde correspondía desde el principio, para que el
+   > historial refleje lo que efectivamente se decidió y no dependa de
+   > inferirlo del código.
+
+3. **Rediseño de la grilla sobre ambas poblaciones: no aplica por ahora**,
+   condicional a que el punto 1 (número de enemigos de T2) cambie en el
+   futuro — sigue sin aplicar, el punto 1 no cambió.
+
+Las tres quedan resueltas al 08-ago-2026 — ver también `sprint-02.md`,
+sección "Insumo adicional reconciliado", para el razonamiento original de
+cada una.

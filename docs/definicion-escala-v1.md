@@ -87,14 +87,23 @@ si al ver los datos del spike el criterio no se siente correcto.
 
 ## Hardware mínimo objetivo (T4)
 
-**Estado: CERRADO (PM, 06-ago).**
+**Estado: CERRADO (PM, 06-ago).** **Actualizado (PM, 08-ago).**
 
-- CPU: 4 núcleos, clase i5 / Ryzen 5 o equivalente moderno
-- GPU: equivalente a GTX 1660 / RX 580
-- RAM: 8 GB
+- CPU: i5-9400, 6 núcleos @2.9GHz (o equivalente)
+- GPU: AMD Radeon RX Vega (integrada) o equivalente
+- RAM: 8 GB (sin cambios)
 
-Gama media. Confirmado que no hay otro título del estudio con spec propia para
-reusar — queda definitiva, no sujeta a revisión en T1.
+**Decisión (PM, 08-ago):** se redefine el hardware mínimo como el de la
+máquina de desarrollo donde ya se corrieron el spike de Sprint 2 y el stress
+test de Fase 2 — no hay diferencia significativa respecto a la spec de gama
+media definida el 06-ago (de hecho, más núcleos de CPU), y se considera
+suficiente. Esto **resuelve retroactivamente** la advertencia de "cota
+optimista, no el piso de hardware mínimo" que traían `sprint-02.md` y
+`fase2-stress-test.md`: ambos benchmarks ya miden contra el mínimo real, no
+hace falta correrlos de nuevo en otra máquina.
+
+Gama media original (06-ago, referencia histórica): CPU 4 núcleos moderno,
+GPU eq. GTX 1660 / RX 580, 8GB RAM.
 
 ---
 

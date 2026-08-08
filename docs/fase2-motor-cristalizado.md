@@ -54,3 +54,33 @@ calibración de combate (lista de la vez pasada) → economía y condición de
 victoria/derrota.** El motor no vuelve a ser el bloqueante hasta que el
 diseño real pida algo que ninguno de los benchmarks corridos hasta acá
 cubra.
+
+**Aclaración (PM, 08-ago):** "contenido real" del juego (armas/torres
+definitivas, oleadas, progresión — lo que vendría después de calibración)
+arranca recién cuando el pico enemigos×proyectiles quede confirmado sólido y
+conforme, no antes. Ese punto **todavía no está cerrado**: el hueco
+metodológico que el propio director aceptó como no-bloqueante en
+`sprint-02.md` Paso 6 (el caso sintético nunca forzó la población hasta el
+pico exacto de 12.000/3.000) sigue sin resolverse — se aceptó para cerrar el
+*spike*, no para arrancar contenido real sin confirmarlo. Gráficos/animación
+y calibración de combate pueden seguir en paralelo mientras tanto porque no
+dependen de ese número exacto; el contenido real sí.
+
+## Punto sugerido para revisión del director (Auditor, 08-ago)
+
+No es un bloqueante de esta firma, pero lo dejo anotado porque me parece
+coherente resolverlo antes de avanzar mucho más en mecánicas, no después:
+**no hay build reproducible documentado para `game/rust/` →
+`bin/sim_hotpath.dll`.** `game/rust/target/` existe localmente (evidencia de
+que se compiló al menos una vez), pero no hay script ni instrucciones — solo
+quien lo compiló una vez sabe reproducirlo, incluyendo el quirk de Smart App
+Control/MSVC que ya se encontró y resolvió durante el spike (`sprint-02.md`).
+
+Razón por la que sugiero resolverlo pronto y no cuando haga falta: este mismo
+documento ya identifica homing y splash como "los candidatos naturales para
+el próximo tramo de `game/rust/`" si se vuelven cuello de botella — y la
+calibración de combate (el siguiente paso) es exactamente el tipo de trabajo
+que puede empujar esos números. Mejor tener el build reproducible documentado
+con la cabeza fría ahora que reconstruirlo a las apuradas si `SimHotPath`
+hace falta extender en medio de la calibración. No bloquea nada de lo de
+arriba — puede ir en paralelo.

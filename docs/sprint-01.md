@@ -141,6 +141,11 @@ Negocio/Marketing (CPU, GPU, RAM mínimos objetivo).
 Confirmado que no hay otro título del estudio con spec propia para reusar (no
 aplica Negocio/Marketing) — esta spec queda como definitiva, no como borrador.
 
+**Actualizado (PM, 08-ago):** redefinida como la máquina de desarrollo
+(i5-9400/6 núcleos, RX Vega, 8GB) — ver `definicion-escala-v1.md` para el
+detalle y por qué esto cierra la validación de hardware mínimo pendiente
+desde el spike.
+
 **Criterio de aceptación:** documento corto (puede ser media página) con la spec
 final, listo para entrar a T9.
 
