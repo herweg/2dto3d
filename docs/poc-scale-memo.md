@@ -166,6 +166,21 @@ decisiones de producto con consecuencias técnicas. Ninguna tiene respuesta toda
    **Acción:** no asumir de antemano que "más optimización" lo resuelve — que lo
    confirme el spike.
 
+   > **Actualización 06-ago:** decidido con antelación al spike, en base a
+   > investigación de precedentes (no a datos propios): se sigue con Godot +
+   > GDExtension. Hay patrón probado en la comunidad (plugins C++/MultiMesh para
+   > bullet-hell) y precedente comercial shipeado (*Dome Keeper*) manejando miles
+   > de entidades en producción. El gap real frente a Unity es la falta de un
+   > ECS/DOTS con paralelismo automático — mitigable con `WorkerThreadPool` si el
+   > spike de un solo hilo se queda corto, no evaluado de antemano. Detalle en
+   > `definicion-escala-v1.md`.
+   >
+   > **No es una decisión cerrada para siempre.** Se reabre formalmente si el
+   > spike mide una brecha grande entre el objetivo de T2 y el resultado real:
+   > concretamente, si ni GDExtension de un solo hilo ni GDExtension +
+   > `WorkerThreadPool` llegan a ~60% del objetivo. Ver condición completa en
+   > `definicion-escala-v1.md`, sección "Decisión sobre el motor".
+
 ---
 
 ## 04. La distancia, en números

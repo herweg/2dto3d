@@ -1,15 +1,26 @@
 # Sprint 1 — Definición de alcance y arranque
 
-**Duración:** 1 semana (5 días hábiles)
+**Duración:** originalmente pensada como 1 semana (5 días hábiles) — ver
+actualización abajo.
 **Rol que lo emite:** Product Manager
-**Fecha de inicio:** viernes 07-ago-2026 (Día 1). Día 2 = lun 10-ago, Día 3 = mar
-11-ago, Día 4 = mié 12-ago, Día 5 = jue 13-ago.
+**Fecha de inicio:** viernes 07-ago-2026 (arrancó de hecho el 06-ago, el mismo
+día que se escribió este documento — ver actualización).
 **Referencia:** `docs/sprint-plan.md` (sección 02) — este archivo es el detalle
 ejecutable de ese sprint, listo para que cada dueño arranque sin tener que releer
 el resto de la documentación.
 
 > **#Auditor — [RESUELTO 06-ago]:** fecha de inicio confirmada por el PM el
 > 06-ago. Queda cerrado.
+
+> **Actualización 06-ago, más tarde — se abandona la cadencia de días fijos.**
+> El desarrollador decidió seguir trabajando a discreción, sin atar las tareas
+> restantes a un calendario de "Día 1/2/3...". Se mantiene todo lo demás del
+> marco (DoD explícito, criterios de aceptación, cortes duros) — lo único que
+> cambia es que no hay fecha de calendario asociada a cada tarea. Donde este
+> documento diga "Día N" más abajo, léase como orden de ejecución, no como
+> fecha — y el corte de "10 días hábiles" del spike (Sprint 2-3, ver
+> `poc-scale-action-plan.md`) se reinterpreta como **10 días de trabajo
+> efectivo acumulado**, no 10 días de calendario.
 
 **Objetivo del sprint (una frase):** cerrar todas las decisiones de producto que el
 spike técnico necesita como input, para que Sprint 2 pueda arrancar el día 1 sin
@@ -53,26 +64,19 @@ validación en el spike), ni tocar el POC existente.
 
 ### T1 — Convocar y correr la sesión de definición de alcance
 **Dueño:** PM
-**Cuándo:** Día 1, viernes 07-ago, por la tarde
-**Duración:** 2 horas
-**Bloquea a:** T2, T3, T6
+**Cuándo:** ~~sesión de 2h agendada~~ — **absorbida por el trabajo del 06-ago**,
+ver estado abajo
+**Bloquea a:** T2, T3, T6 — todas ya cerradas
 
-Agenda propuesta para la sesión (llevarla escrita, no improvisar):
+**Estado: CERRADO (06-ago), sin necesidad de sesión formal separada.** En vez de
+una sesión de 2h agendada para un día futuro, las decisiones que esta tarea
+tenía que producir (T2, T4, T6, T7, y la decisión de motor) se cerraron en
+conversación directa el mismo 06-ago, con investigación de precedentes de por
+medio (ver `definicion-escala-v1.md`) — más rigurosas que una sesión informal,
+porque cada una quedó documentada con su justificación. No queda nada de la
+agenda original sin resolver.
 
-1. Presentar la cifra propuesta por el director (20.000 proyectiles simultáneos,
-   pico de 30.000) como punto de partida — no como número cerrado.
-2. Diseño de combate valida o ajusta esa cifra contra lo que el gameplay real
-   necesita.
-3. Confirmar/definir hardware mínimo objetivo (traer lo investigado en T4 si ya está).
-4. Postura sobre multijugador: sí / no / "más adelante con intención" — forzar una
-   respuesta explícita, no dejarla abierta.
-5. Cerrar fecha de entrega de T3 (documento de combate) y T5 (variedad de tipos)
-   dentro de este mismo sprint.
-6. Confirmar disponibilidad del equipo técnico para el spike (T7).
-
-**Salida de la tarea:** notas de la sesión con las 4 decisiones tomadas (número,
-hardware, multijugador, fechas de T3/T5) — no hace falta acta formal, alcanza con un
-documento corto compartido con todos los participantes el mismo día.
+**Salida de la tarea:** `definicion-escala-v1.md` completo — cumplido.
 
 ---
 
@@ -87,10 +91,15 @@ de "miles" o "decenas de miles" sin número. Formato esperado:
 > "N proyectiles vivos simultáneos, pico de M en oleadas de clímax. K enemigos
 > activos simultáneos, pico de L."
 
-**Estado (PM, 06-ago):** deliberadamente **no** prefijado hoy — se decide recién en
-T1 con la cifra del director (20.000/pico 30.000) como punto de partida de
-discusión, no como número ya cerrado. Ver `auditoria-sprint1.md` sobre el riesgo de
-anclarse en esa cifra sin contrastarla.
+**Estado (PM, 06-ago) — CERRADO, adelantado a T1:** con investigación de
+precedentes del género de por medio (Brotato, Vampire Survivors, danmaku, y
+precedente real en Godot vía plugins C++/MultiMesh y *Dome Keeper* shipeado),
+se fijó en **~1.500–2.000 enemigos simultáneos (pico 3.000), ~6.000–8.000
+proyectiles simultáneos (pico 10.000–12.000)** — no se ratificó la cifra del
+director (20.000/30.000) tal cual, se ajustó a la baja con datos de mercado.
+Detalle completo en `definicion-escala-v1.md`. Queda abierto a ajustarse más
+adelante si surge algo nuevo de Diseño de combate, pero no es un placeholder —
+es el número de trabajo.
 
 **Criterio de aceptación:** el número entra tal cual al documento de escala v1 (T9)
 sin necesitar aclaración adicional.
@@ -102,19 +111,19 @@ sin necesitar aclaración adicional.
 **Cuándo:** entregar antes de que termine el sprint (fecha exacta se fija en T1)
 **Depende de:** puede arrancar en paralelo a T1, no depende de la sesión
 
-Lista **cerrada** de modificadores de daño que se soportan en v1: críticos,
-resistencias elementales, perforación, daño en el tiempo, cadenas, u otros que el
-equipo de combate considere. Todo lo que no entre en esta lista queda explícitamente
-etiquetado como "fase futura, fuera de v1" — no se deja ambiguo.
+**Estado: CERRADO (06-ago).** Ver `docs/combat-design-v1.md`. Los 5 modificadores
+candidatos (críticos, resistencias elementales, perforación, daño en el tiempo,
+cadenas) entran en v1, cada uno con su mecánica y su costo exacto en campos
+nuevos de `entity_store.gd` documentado. Nada quedó en la lista original sin
+resolver — no hubo que declarar ninguno "fase futura" de los cinco candidatos;
+lo que sí queda fuera de v1 son variantes más amplias de cada uno (más de 2
+elementos, DoT con stackeo, cadenas sin tope, etc.), listadas explícitamente en
+el documento.
 
-**Por qué es bloqueante y no un nice-to-have:** el formato de la fila de datos por
+**Por qué era bloqueante y no un nice-to-have:** el formato de la fila de datos por
 proyectil en `entity_store.gd` (Sprint 4+) se congela contra este documento. Un
 modificador agregado después de empezar a construir tiene costo de migración —
-advertencia explícita del director.
-
-**Criterio de aceptación:** cada modificador de la lista tiene, como mínimo, una
-frase de cómo afecta al cálculo de daño (no hace falta el diseño numérico completo,
-sí la mecánica).
+advertencia explícita del director. Ya está resuelto.
 
 ---
 
@@ -150,9 +159,15 @@ Responder explícitamente: de los tipos de proyectil que se esperan, ¿cuántos 
 - Variedad de comportamiento (cada tipo con lógica propia) → cada uno es trabajo de
   diseño y contenido real, no solo de motor.
 
+**Estado: CERRADO (06-ago).** Ver `docs/projectile-variety-v1.md`. **~10-15
+comportamientos únicos**, con roster inicial de 13 candidatos ya listado
+(reusando lo que hoy existe — recto homing, orbital — más los ganchos mecánicos
+de T3 — perforación, cadena — y variantes clásicas del género). Ninguno pide
+estructura de datos nueva más allá de lo ya congelado en T3.
+
 **Criterio de aceptación:** un número aproximado de tipos con comportamiento único
 esperados para v1 (no hace falta precisión, sí orden de magnitud: "~10", "~50",
-"cientos").
+"cientos"). Cumplido.
 
 ---
 
@@ -176,8 +191,9 @@ no es la postura de partida.
 
 ### T7 — Aprobación formal del spike y confirmación de equipo
 **Dueño:** vos, en ambos roles (PM aprueba / Dirección de Desarrollo confirma equipo)
-**Cuándo:** Día 2 (aprobación) — ya no hace falta esperar a Día 3-4, ver estado abajo
-**Depende de:** T1 (necesita el número objetivo para dimensionar el spike)
+**Cuándo:** ~~Día 2~~ **CERRADO 06-ago**, sin esperar a ningún día en particular
+**Depende de:** T1 (necesita el número objetivo para dimensionar el spike) — T2 ya
+cerró hoy, así que la dependencia está satisfecha
 
 Dos partes:
 
@@ -185,21 +201,23 @@ Dos partes:
    fecha de roadmap sin esto.
 2. Confirmar el equipo del spike, dedicación exclusiva desde día 1 de Sprint 2.
 
-**Estado (PM, 06-ago):**
-- Aprobación formal (parte 1) pospuesta a propósito hasta ver el resultado de T1
-  (en particular T2, el número objetivo). Agendada para el Día 2 (lun 10-ago),
-  inmediatamente después de que cierre T1.
-- Equipo (parte 2): **confirmado — desarrollador único, sin otro dev senior que
-  sumar.** La ruta GDExtension del spike se apoya en asistencia de Claude Code
-  para la implementación en C++/Rust, dado que no hay experiencia previa propia;
-  el trabajo humano se concentra en leer y validar lo indispensable de bindings
-  de Godot, no en escribir el binding desde cero sin apoyo. Esto reduce (no
+**Estado (PM, 06-ago) — CERRADO, ambas partes:**
+- **Aprobación formal:** aprobada. Marco de 1–2 semanas de spike (Sprint 2-3),
+  con corte duro a los **10 días de trabajo efectivo acumulado** (no calendario
+  — ver actualización sobre cadencia al inicio del documento). No entra a
+  roadmap público hasta el checkpoint de decisión, como pidió el director.
+- **Equipo:** confirmado — desarrollador único, sin otro dev senior que sumar.
+  La ruta GDExtension del spike se apoya en asistencia de Claude Code para la
+  implementación en C++/Rust, dado que no hay experiencia previa propia; el
+  trabajo humano se concentra en leer y validar lo indispensable de bindings de
+  Godot, no en escribir el binding desde cero sin apoyo. Esto reduce (no
   elimina) el riesgo de sesgo por curva de aprendizaje señalado en
   `directorsuggestions.md` — vale medir igual cuánto tiempo real consume esa
-  curva dentro del corte de 10 días hábiles del spike.
+  curva dentro del corte de 10 días de trabajo del spike.
 
 **Criterio de aceptación:** aprobación registrada con fecha; confirmación de
-dedicación exclusiva del desarrollador único desde día 1 de Sprint 2.
+dedicación exclusiva del desarrollador único desde el arranque de Sprint 2.
+Cumplido.
 
 ---
 
@@ -211,6 +229,16 @@ Crear la estructura de carpetas propuesta en `directorsuggestions.md`
 (`sim/`, `render/`, `data/`) vacía, sin lógica. Esto no es un entregable medido en el
 DoD del sprint — es trabajo de preparación opcional para no perder el primer día de
 Sprint 2 en setup.
+
+**Estado: CERRADO.** Carpetas creadas en `game/sim/`, `game/render/`,
+`game/data/` (vacías, con `.gitkeep` para que git las trackee). Se creó un
+directorio nuevo `game/` en la raíz del repo, hermano de `POC/`, en vez de
+agregarlas dentro de `POC/` — coherente con la recomendación del memo de tratar
+el POC como especificación validada, no como cimiento (`poc-scale-memo.md`,
+sección 05, punto 1). Deliberadamente **no** se creó `project.godot` todavía —
+inicializar el proyecto Godot real es el primer paso de Sprint 2, no de este
+andamiaje, para que quede visible como trabajo del spike y no se pre-decida
+en silencio acá.
 
 > **#Auditor — [RESUELTO 06-ago]:** repositorio git inicializado, `.gitignore`
 > agregado (excluye `.godot/`, y ya deja previsto espacio para artefactos de build
@@ -247,22 +275,25 @@ documento y empezar el spike sin tener que preguntar nada más.
 El sprint está **done** solo si las 9 tareas están completas y "Definición de escala
 v1" (T9) está publicada con:
 
-- [ ] Número objetivo de escala, con pico, sin ambigüedad (T2)
-- [ ] Spec de hardware mínimo definida (T4)
-- [ ] Documento de diseño de combate v1 cerrado (T3)
-- [ ] Definición de variedad de tipos de proyectil (T5)
-- [ ] Postura sobre multijugador, explícita (T6)
-- [ ] Spike aprobado formalmente, equipo confirmado por nombre (T7)
+- [x] Número objetivo de escala, con pico, sin ambigüedad (T2)
+- [x] Spec de hardware mínimo definida (T4)
+- [x] Documento de diseño de combate v1 cerrado (T3)
+- [x] Definición de variedad de tipos de proyectil (T5)
+- [x] Postura sobre multijugador, explícita (T6)
+- [x] Spike aprobado formalmente, equipo confirmado (T7)
 
-Si al final del día 5 falta cualquiera de estos puntos, el sprint **no está done** y
-el inicio de Sprint 2 se corre — no se arranca el spike con inputs incompletos. Mejor
-mover una fecha que medir el número equivocado.
+**Sprint 1 — DONE (06-ago-2026).** Cerrado en una sola sesión de trabajo el mismo
+día en que se redactó este documento, no en 5 días de calendario — coherente con
+la decisión de abandonar la cadencia de días fijos (ver actualización al inicio).
+Sprint 2 (spike técnico) puede arrancar cuando el desarrollador decida retomarlo,
+sin fecha impuesta.
 
 ---
 
-## Riesgo específico de este sprint
+## Riesgo específico de este sprint — [CERRADO, no se materializó]
 
-Que la sesión de alcance (T1) termine sin cifras concretas y el equipo la dé por
-"suficientemente cerrada" para avanzar. No lo es. Si el número sigue en "más o menos
-miles" al cierre del sprint, T2 no está cumplida y el sprint no cierra, aunque el
-resto de las tareas sí.
+El riesgo era que la sesión de alcance (T1) terminara sin cifras concretas y se
+diera por "suficientemente cerrada" para avanzar igual. No pasó: T2 cerró con
+cifra dura y pico (~6.000-8.000 proyectiles, pico 10-12k; ~1.500-2.000 enemigos,
+pico 3.000), contrastada contra investigación de precedentes del género, no
+"más o menos miles".

@@ -9,6 +9,15 @@ arrancar; todo lo posterior al checkpoint de decisión es tentativo a propósito
 no lo voy a fijar en firme hasta tener los datos del spike, por la misma razón que
 ambos documentos técnicos piden no comprometer fecha antes de eso.
 
+> **Actualización 06-ago, más tarde:** Sprint 1 se cerró completo el mismo día
+> (ver `sprint-01-asignaciones.md`), y a partir de ahí el desarrollador decidió
+> abandonar la cadencia de sprints atados a calendario — se sigue trabajando a
+> discreción. Los conceptos de este documento (criterios de salida explícitos,
+> corte duro del spike a los 10 días de trabajo efectivo, no fijar Fase 2 hasta
+> el checkpoint) siguen vigentes; lo que ya no aplica es la duración literal de
+> "1 semana por sprint" — no hay más sprints numerados con fecha, hay trabajo
+> secuenciado por dependencias.
+
 ---
 
 ## 00. Cadencia elegida

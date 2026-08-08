@@ -160,10 +160,11 @@ herramienta versus en la arquitectura misma.
 - [x] Aclarar rol "Dirección de producto" (3.2) — mismo desarrollador único
 - [x] `git init` + `.gitignore` + commit inicial del POC actual (3.3)
 - [x] Fijar y comunicar la fecha de inicio del sprint (3.4) — vie 07-ago-2026
-- [ ] Bloquear en el calendario el horario de la sesión T1 (mañana, tarde)
+- [x] ~~Bloquear en el calendario el horario de la sesión T1~~ — ya no aplica
 
-Con los cuatro puntos de cimientos cerrados, no encuentro razón para no arrancar
-Sprint 1 mañana tal como está diseñado en `sprint-plan.md` y `sprint-01.md`. Lo
-único operativo que queda para hoy es agendar el bloque de la sesión T1 en el
-calendario — el resto de T2–T9 se ejecuta durante la semana según
-`sprint-01-asignaciones.md`.
+**Actualización 06-ago, cierre del día:** no hizo falta esperar a mañana. Con
+los cimientos resueltos, el resto de las tareas de Sprint 1 (T2–T7, T9) se
+cerraron el mismo día, y el desarrollador decidió abandonar la cadencia de
+días/fechas fijas para el trabajo siguiente. Sprint 1 terminó **done** el
+06-ago — ver `sprint-01.md` y `definicion-escala-v1.md` para el detalle
+completo, y `sprint-01-asignaciones.md` para el resumen de cierre.
