@@ -50,19 +50,36 @@ falta:
   `dot_time_left` y aplica `dot_dps * delta` a `health` — no existe
   todavía, es la única pieza de lógica genuinamente nueva del lote.
 
-### 1.2 Láser — antes de tocar código, una pregunta de arquitectura
+### 1.2 Láser — confirmado, y más barato de lo que pensaba
 
-Tal como lo describís ("sprite fijo", DPS mientras el enemigo está encima)
-esto suena a que la torre daña directo a lo que tiene en el haz cada tick —
-**sin spawnear un proyectil**. Si es así, no consume presupuesto de
-`ProjectileStore` para nada: es una extensión de `tower_system.gd` (chequeo
-de overlap en una línea/cono desde la torre, mismo costo que el targeting
-que ya existe) más un `dot`-like tick de daño directo. Antes de que alguien
-empiece a construirlo como "un proyectil que no se mueve" — que sería
-mezclar dos modelos por accidente — conviene confirmar esto con quien lo
-vaya a implementar. Si es así, el láser en realidad **ayuda** al problema
-de proyectiles en vez de sumarle carga: es presupuesto que no compite con
-el resto.
+**Confirmación de la PM, 08-ago:** el láser sigue en pie, no lo reemplaza
+Riel (mecanismo distinto — ver sección 3) y faltaba agregarlo al catálogo
+de `docs-torretas-diseno.md`. Mecánica afinada: alto DPS mientras el
+enemigo toca el haz, más un margen corto después de perder contacto (~0.5s
+o un puñado de ticks) para que no se sienta que el daño corta en seco.
+
+Con ese detalle del margen, cambio mi lectura: esto **no es un tipo de
+proyectil nuevo, es el mismo mecanismo que lanzallamas (1.1) con otra
+fuente.** Un temporizador de "sigo recibiendo daño" que se refresca
+mientras hay contacto y decae solo cuando el contacto se corta es
+exactamente `dot_time_left`/`dot_dps` — el mismo slot que ya congeló
+`combat-design-v1.md` para daño en el tiempo, no uno nuevo. La única
+diferencia real entre lanzallamas y láser es **quién alimenta el
+temporizador cada tick**: una zona plantada en el piso (lanzallamas,
+`PROJ_ZONE`) o un chequeo de overlap directo desde la torre sin spawnear
+nada (láser, extensión de `tower_system.gd`). El sistema que aplica el
+daño — decrementar `dot_time_left`, restar `dot_dps * delta` a `health` —
+es el mismo para los dos. Confirmo la lectura original: el láser no
+consume presupuesto de `ProjectileStore`, y ahora tampoco pide campos
+nuevos en `EnemyStore` más allá de los 2 que ya hacía falta escribir para
+lanzallamas.
+
+Único punto de diseño a resolver antes de codear, no antes de seguir: si
+un enemigo está parado sobre una zona de lanzallamas Y en el haz de un
+láser al mismo tiempo, comparten el mismo slot de DoT (v1 es un slot sin
+stackeo, por diseño de `combat-design-v1.md`) — el que refresca último
+"gana". Es el comportamiento que ya implica el esquema congelado, no una
+decisión nueva; lo dejo explícito para que no sorprenda a nadie en QA.
 
 ### 1.3 Misiles — el más barato de sumar, más barato todavía de lo que dije
 
@@ -95,18 +112,11 @@ cual. Lo único nuevo es cómo se actualiza `velocity` cada tick.
    láser entra a `ProjectileStore` o no (sección 1.2). Esto es diseño de
    datos, no requiere `game/rust/` compilado — puede arrancar ya.
 
-   **Actualización 08-ago:** `docs/docs-torretas-diseno.md` (catálogo de ~20
-   torretas, diseño en papel de la PM) llegó después de este triage y no
-   está reconciliado contra él — ver la revisión al final de ese documento.
-   No cambia el orden de trabajo: el alcance de *este* congelamiento sigue
-   siendo básico/misiles/lanzallamas/láser (lo que ya bloquea el benchmark de
-   2.000/3.000/20). El resto del catálogo (Riel, Mortero, Racimo, Enjambre,
-   y sobre todo las categorías D/E/F, que piden `proj_type` genuinamente
-   nuevos) es contenido para después — extenderlo ahora sería construir por
-   las dudas, exactamente lo que este proyecto viene evitando. Si el
-   benchmark de 20 torres necesita representar más variedad que los 4 tipos
-   actuales + misiles/lanzallamas para ser creíble, esa es una decisión del
-   PM/director a tomar antes del paso 4, no una que yo deba forzar acá.
+   **Reconciliación con el catálogo de 20 torretas (director, 08-ago) — ver
+   sección 3 para el detalle.** El alcance de *este* congelamiento se
+   amplía a 7 tipos (recto, homing, perforante, splash, misil, zona de DoT
+   compartida por lanzallamas/láser) — el resto del catálogo queda
+   deferido, explícitamente, no por descuido.
 2. **Documentar el build reproducible de `game/rust/` — esto ya no es "en
    paralelo, no bloqueante" como dije la vez pasada.** Si el próximo paso es
    literalmente extender `SimHotPath`, alguien va a tener que compilarlo de
@@ -127,5 +137,122 @@ cual. Lo único nuevo es cómo se actualiza `velocity` cada tick.
    (overrides en 0.0). Criterio de aceptación: **120% del objetivo**, no
    100% — la condición que dejó la PM en T4.
 
-Gráficos/animación y el diseño en papel de las 20 torres siguen su curso en
-paralelo — nada de esto los bloquea ni depende de ellos.
+---
+
+## 3. Reconciliación con el catálogo de 20 torretas (director, 08-ago)
+
+Buen catálogo — el criterio de color de firma + 3 capas de escalado visual
+resuelve por adelantado un problema real (20 torretas maxeadas disparando
+juntas, ilegible si no hay algo que ancle la lectura). Coincido con el
+catch técnico del auditor: "los `proj_type` existentes alcanzan para A/B/C
+tal cual" no se sostiene mirando las entradas una por una. Mi propio triage
+de las 4 que señaló, entrada por entrada — porque "necesita lógica nueva"
+no es lo mismo que "es cara" o "es difícil", y conviene distinguirlas antes
+de priorizar:
+
+- **Riel** — igual que el láser (1.2): esto es un chequeo directo de la
+  torre contra una línea del hash espacial, no un proyectil que viaja. La
+  "carga 1-2s" es un timer del lado de la torre, no de `ProjectileStore`.
+  Barato, y probablemente no compite por presupuesto de proyectiles —
+  misma familia que láser, no una nueva.
+- **Mortero** — trayectoria distinta (arco en vez de recta), pero mismo
+  truco que ya destrabó el misil: precomputar la curva una sola vez al
+  spawnear y recorrerla — el "arco" puede ser puramente visual (sombra +
+  escala) sobre una trayectoria XY simple con delay. Reusa el mecanismo del
+  misil casi entero.
+- **Enjambre** — no es un `proj_type` nuevo: es homing (`type 1`) que ya
+  existe, disparado 3-5 veces por vez en vez de una. El costo real no es de
+  lógica, es de **presupuesto** — cada disparo de Enjambre consume 3-5
+  entradas del `ProjectileStore` de un saque. Justo lo que señaló el
+  auditor: importa para el benchmark de 3.000, no para el triage de
+  comportamientos.
+- **Racimo** — este sí es genuinamente distinto, y el único de los cuatro
+  que no se resuelve con un truco ya conocido: necesita que un impacto
+  pueda **crear proyectiles nuevos** (los 4-6 fragmentos), algo que ningún
+  tipo de hoy hace. Si esto vive dentro de `SimHotPath` (paso 3), la
+  llamada nativa no puede simplemente mutar el store desde Rust sin pensarlo
+  — más prolijo que devuelva "acá hay que spawnear N fragmentos en este
+  punto" como parte del resultado, y que GDScript haga el `spawn()` real al
+  volver del batch. Es la única de las cuatro que le agrega una superficie
+  nueva al contrato de `SimHotPath`, no solo un comportamiento más.
+
+**Decisión de alcance:** el congelamiento del paso 1 se amplía a **7
+tipos** — recto, homing, perforante, splash, misil, y la zona de DoT
+compartida entre lanzallamas y láser (que no son un `proj_type` nuevo cada
+uno, son una sola pieza de sistema con dos fuentes). Riel entra gratis en
+la misma familia que láser (no consume presupuesto de proyectiles, así que
+no hace falta esperarlo para el benchmark). **Racimo, y las categorías D/E/F
+completas (hielo, veneno, cadena, gravedad, buff, maldición, minas, orbital,
+caos) quedan deferidas a una ronda de contenido posterior** — no por
+descuido, por la misma disciplina que ya viene sosteniendo este proyecto:
+no se construye por las dudas antes de que haga falta. El benchmark del
+paso 4 se arma con los 7 tipos de esta ronda (Riel y láser suman variedad
+visual y de mecánica sin sumar carga de `ProjectileStore`), no con las 20
+torretas completas — es representativo de los perfiles de costo reales
+(disparo simple, re-apuntado continuo, multi-impacto, consulta de área,
+trayectoria precomputada, DPS sostenido por zona) sin inventar trabajo que
+todavía nadie pidió.
+
+Gráficos/animación y el resto del diseño en papel de las 20 torres siguen su
+curso en paralelo — nada de esto los bloquea ni depende de ellos.
+
+---
+
+## 4. Resultado — los 4 pasos ejecutados (08-ago-2026)
+
+Los 7 tipos congelados en la sección 3 están implementados y corrieron por
+el benchmark. Reporte completo, incluido el diagnóstico de un problema real
+que apareció en el camino: `docs/fase2-benchmark-conjunto.md`.
+
+**Resumen de una línea:** el benchmark de pico conjunto (2.000 enemigos,
+3.000 proyectiles, 20 torres — todo ×1.2 por la condición del 20% de T4)
+**ronda justo la línea de 60fps (58-65fps)** con el hot path de Rust
+extendido — no es una aprobación cómoda, es un empate técnico. En el
+camino se encontró y corrigió un problema real de metodología del
+benchmark (PROJ_ZONE inyectado como si fuera un proyectil más de volumen,
+cuando en juego real nunca hay más que un puñado activas) — sin esa
+corrección, el número reportado hubiera sido un falso negativo severo
+(7.5-13fps). Detalle completo, cifras por eje y qué hacer con esto en el
+documento dedicado.
+
+---
+
+## 5. Arquitectura de láser/lanzallamas — cristalizada (PM, 08-ago, post-benchmark)
+
+Tarjeta pendiente de la ronda anterior ("coordinar la confirmación de
+arquitectura del láser con quien lo vaya a implementar") cerrada con
+mecánica concreta, no solo con un sí/no:
+
+**Ambos son un rectángulo de área efectiva que parte de la torreta** —
+mismos 4 parámetros (largo, ancho, DPS/tick, duración de linger), distintos
+valores: láser angosto+largo+DPS alto+linger corto; lanzallamas
+ancho+corto+DPS bajo+linger largo. Detalle completo, valores y estado de
+implementación en `tower_store.gd` (comentario sobre `TOWER_TYPE_STATS`,
+filas 5 y 6) — no lo repito acá para no tener dos fuentes de verdad.
+
+**Conecta directo con el hallazgo de la sección 4, arriba:** si lanzallamas
+migra de `PROJ_ZONE` (fila 5 hoy) a la misma familia `TOWER_MODE_BEAM` que
+ya usa láser, deja de consumir `ProjectileStore` y de llamar
+`hash.query_nearby()` por tick — exactamente la causa que encontró el
+diagnóstico de 7.5-13fps. No es un cambio hecho todavía (`_tick_laser()`
+sigue siendo círculo+un blanco, no rectángulo — ver nota en
+`tower_store.gd`), pero cuando se generalice a un `_tick_beam()`
+compartido, probablemente vuelve innecesario el workaround de
+`ZONE_FIXED_COUNT := 10` en vez de solo mitigarlo.
+
+**Pendiente, no resuelto acá:** la nota visual del PM sobre estados
+(prendido fuego, etc.) — capturada en `combat-design-v1.md`, modificador 4,
+como restricción de diseño (un solo estado visual por enemigo aunque haya
+más de un efecto mecánico activo) para cuando se retomen las categorías
+D/E/F.
+
+**Reconciliación pendiente con `docs-torretas-diseno.md`, para que quede
+anotada:** el catálogo de 20 no tiene una entrada llamada "Láser" — lo más
+cercano por nombre es Riel (#3), que es un mecanismo distinto (hitscan de
+carga, no DPS continuo). Tampoco usa los nombres "misil" ni "lanzallamas" —
+lo más cercano es Mortero (#9, trayectoria en arco) y Fuego (#11, zona de
+DoT), que no son necesariamente lo mismo que lo implementado acá. Tres
+mecanismos con nombre y fila real en `tower_store.gd` sin contraparte clara
+en el catálogo de la PM — vale una pasada de reconciliación de nombres
+antes de que Dirección de Arte (`docs/diseno-grafico.md`) tenga que adivinar
+qué ilustrar para cada fila.

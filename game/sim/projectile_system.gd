@@ -7,15 +7,21 @@ extends RefCounted
 const HIT_RADIUS := 10.0
 const HIT_RADIUS_SQ := HIT_RADIUS * HIT_RADIUS
 
-## Los 4 comportamientos de proyectil (Fase 2 — "al menos 4 proyectiles
-## diferentes"). Reutilizan el mismo array plano de ProjectileStore, tal
-## como preveía projectile-variety-v1.md: la diferencia es lógica de
-## movimiento/resolución de impacto por type_id, no una estructura de datos
-## distinta. Cada tipo de torre (tower_store.gd) dispara uno de estos.
+## Los 6 comportamientos de proyectil que pasan por ProjectileStore (Fase 2
+## — congelamiento de 7 tipos de fase2-plan-proyectiles.md; el 7º, láser, no
+## está acá porque no spawnea proyectil — ver tower_system.gd). Reutilizan
+## el mismo array plano, tal como preveía projectile-variety-v1.md: la
+## diferencia es lógica de movimiento/resolución de impacto por type_id, no
+## una estructura de datos distinta.
 const PROJ_STRAIGHT := 0  # dirección fija al disparar — el de siempre desde Sprint 2
 const PROJ_HOMING := 1    # corrige rumbo hacia el enemigo objetivo en cada tick
 const PROJ_PIERCE := 2    # sigue de largo tras cada impacto hasta agotar hits_remaining
 const PROJ_SPLASH := 3    # al impactar, daña también a los enemigos dentro de splash_radius
+const PROJ_MISSILE := 4   # trayectoria fija precalculada al spawnear (Bézier), splash al llegar
+const PROJ_ZONE := 5      # no viaja (vel=0); cada tick refresca DoT de los enemigos en splash_radius
+
+const ZONE_DOT_REFRESH := 0.4  # ver dot_system.gd — mismo margen que usa el láser
+const MISSILE_ARC_HEIGHT := 60.0
 
 var proj_store: ProjectileStore
 var enemy_store: EnemyStore
@@ -29,10 +35,11 @@ var hits_last_tick: int = 0
 ## está en otro lado. No es parte del diseño final — solo instrumentación.
 var skip_collision: bool = false
 
-## Ruta B (Paso 4): instancia de SimHotPath (game/rust/), o null si el
-## GDExtension no está cargado. Cuando está seteada, tick_native() reemplaza
-## la búsqueda de colisión por-proyectil de tick() por una sola llamada al
-## batch nativo, por frame.
+## Ruta B (Paso 4 de Sprint 2 / Paso 3 de fase2-plan-proyectiles.md):
+## instancia de SimHotPath (game/rust/), o null si el GDExtension no está
+## cargado. Cuando está seteada, tick_native() reemplaza el batch de
+## movimiento+colisión por-proyectil de tick() por una sola llamada nativa
+## por frame, para los tipos que SimHotPath sabe resolver (ver su nota).
 var native: Object = null
 
 var _dead_marks: PackedByteArray
@@ -47,22 +54,35 @@ func tick(delta: float) -> void:
 	hits_last_tick = 0
 	var i := 0
 	while i < proj_store.active_count:
-		if proj_store.type_id[i] == PROJ_HOMING:
-			_steer_homing(i)
+		var dead: bool
 
-		proj_store.positions[i] += proj_store.velocities[i] * delta
-		proj_store.ttl[i] -= delta
-
-		var dead := proj_store.ttl[i] <= 0.0
-
-		if not dead and not skip_collision:
-			dead = _check_collision(i)
+		match proj_store.type_id[i]:
+			PROJ_ZONE:
+				dead = _tick_zone(i, delta)
+			PROJ_MISSILE:
+				dead = _tick_missile(i, delta)
+			_:
+				dead = _tick_traveling(i, delta)
 
 		if dead:
 			proj_store.release(i)
 			# no incrementar i: el swap-remove trajo una entidad nueva a este índice
 		else:
 			i += 1
+
+## Recto/homing/perforante/splash: el batch de siempre desde Sprint 2 —
+## integra por velocidad y resuelve colisión contra el hash.
+func _tick_traveling(i: int, delta: float) -> bool:
+	if proj_store.type_id[i] == PROJ_HOMING:
+		_steer_homing(i)
+
+	proj_store.positions[i] += proj_store.velocities[i] * delta
+	proj_store.ttl[i] -= delta
+
+	var dead := proj_store.ttl[i] <= 0.0
+	if not dead and not skip_collision:
+		dead = _check_collision(i)
+	return dead
 
 ## Homing (Ruta A GDScript únicamente — ver nota de tick_native() más abajo):
 ## re-apunta la velocidad hacia target_enemy cada tick, conservando la
@@ -99,64 +119,160 @@ func _check_collision(i: int) -> bool:
 	proj_store.hits_remaining[i] -= 1
 	return proj_store.hits_remaining[i] <= 0
 
-## Splash: además del enemigo golpeado, daña a los que caen dentro de
-## splash_radius del punto de impacto — reusa hash.query_nearby() (el mismo
-## radio de celdas que ya visita find_hit()) en vez de una consulta nueva.
+## Splash (y misil, que reusa esto al llegar): además del enemigo golpeado,
+## daña a los que caen dentro de splash_radius del punto de impacto. El
+## gate es splash_radius > 0, no el type_id — así misil no necesita
+## duplicar esta lógica.
 func _apply_hit(i: int, e_idx: int) -> void:
 	enemy_store.health[e_idx] -= proj_store.damage[i]
-
-	if proj_store.type_id[i] != PROJ_SPLASH or proj_store.splash_radius[i] <= 0.0:
+	if proj_store.splash_radius[i] <= 0.0:
 		return
+	_apply_area_damage(proj_store.positions[i], proj_store.damage[i], proj_store.splash_radius[i], e_idx)
 
-	var pos := proj_store.positions[i]
-	var radius_sq := proj_store.splash_radius[i] * proj_store.splash_radius[i]
+func _apply_area_damage(pos: Vector2, dmg: float, radius: float, exclude: int = -1) -> void:
+	var radius_sq := radius * radius
 	for other in hash.query_nearby(pos):
-		if other == e_idx:
+		if other == exclude:
 			continue
 		if enemy_store.positions[other].distance_squared_to(pos) <= radius_sq:
-			enemy_store.health[other] -= proj_store.damage[i]
+			enemy_store.health[other] -= dmg
 
-## Ruta B: movimiento en GDScript (igual que tick()), colisión en un solo
-## batch nativo (SimHotPath.find_collisions — game/rust/src/lib.rs), y el
-## swap-remove se resuelve acá con los resultados. Índices estables entre el
-## batch de movimiento y la llamada nativa: nada se remueve hasta el final.
-##
-## NOTA (Fase 2): no soporta todavía homing/perforante/splash — SimHotPath
-## solo devuelve pares de impacto simples. Solo lo usa el benchmark del
-## spike (backend=native); la pantalla 1 corre en tick() (GDScript), que sí
-## tiene los 4 comportamientos. Extender esto es trabajo futuro si una
-## pantalla necesita la escala de Ruta B con variedad de proyectiles.
-func tick_native(delta: float) -> void:
-	hits_last_tick = 0
-	var count := proj_store.active_count
+## Lanzallamas (fase2-plan-proyectiles.md 1.1): no viaja (vel=0 al
+## spawnear), vive por ttl, y cada tick refresca dot_dps/dot_time_left de
+## los enemigos dentro de splash_radius en vez de aplicar daño directo —
+## dot_system.gd es quien realmente descuenta vida.
+func _tick_zone(i: int, delta: float) -> bool:
+	proj_store.ttl[i] -= delta
+	if not skip_collision:
+		var pos := proj_store.positions[i]
+		var radius_sq := proj_store.splash_radius[i] * proj_store.splash_radius[i]
+		var dps := proj_store.damage[i]
+		for e in hash.query_nearby(pos):
+			if enemy_store.positions[e].distance_squared_to(pos) <= radius_sq:
+				enemy_store.dot_dps[e] = dps
+				enemy_store.dot_time_left[e] = ZONE_DOT_REFRESH
+	return proj_store.ttl[i] <= 0.0
 
-	for i in count:
-		proj_store.positions[i] += proj_store.velocities[i] * delta
-		proj_store.ttl[i] -= delta
-		_dead_marks[i] = 1 if proj_store.ttl[i] <= 0.0 else 0
+## Misil (fase2-plan-proyectiles.md 1.3): posición recalculada cada tick
+## sobre un Bézier cuadrático origen→control→destino (control derivado del
+## punto medio, no almacenado — es el "firulete" visual), no integrada por
+## velocidad. Al llegar, resuelve como splash en el punto de impacto —
+## reusa _apply_area_damage(), no _check_collision() (no persigue nada en
+## vuelo, así que no tiene sentido buscar "el enemigo debajo" primero).
+func _tick_missile(i: int, delta: float) -> bool:
+	proj_store.ttl[i] -= delta
+
+	var duration := proj_store.traj_duration[i]
+	var t := 1.0 - clampf(proj_store.ttl[i] / duration, 0.0, 1.0)
+	var origin := proj_store.traj_origin[i]
+	var target := proj_store.traj_target[i]
+	var to_target := target - origin
+	var control := (origin + target) * 0.5
+	if to_target.length_squared() > 1.0:
+		control += to_target.orthogonal().normalized() * MISSILE_ARC_HEIGHT
+	var a := origin.lerp(control, t)
+	var b := control.lerp(target, t)
+	proj_store.positions[i] = a.lerp(b, t)
+
+	if proj_store.ttl[i] > 0.0:
+		return false
 
 	if not skip_collision:
-		var pairs: PackedInt32Array = native.find_collisions(
-			proj_store.positions, count,
-			enemy_store.positions, enemy_store.active_count,
-			HIT_RADIUS, hash.cell_size
-		)
-		var j := 0
-		while j < pairs.size():
-			var p_idx := pairs[j]
-			var e_idx := pairs[j + 1]
-			if _dead_marks[p_idx] == 0:
-				enemy_store.health[e_idx] -= proj_store.damage[p_idx]
-				hits_last_tick += 1
-				_dead_marks[p_idx] = 1
-			j += 2
+		_apply_area_damage(proj_store.positions[i], proj_store.damage[i], proj_store.splash_radius[i])
+		hits_last_tick += 1
+	return true
+
+## Ruta B: movimiento en GDScript — incluye el steer de homing y el Bézier
+## de misil, exactamente igual que tick() — colisión en un solo batch
+## nativo para los tipos que viajan (recto/homing/perforante/splash).
+## SimHotPath no mueve nada ni toca stores: recibe posiciones ya
+## actualizadas y devuelve qué pegó con qué — GDScript sigue siendo dueño
+## de todo el estado (mismo criterio que el contrato de Racimo en
+## fase2-plan-proyectiles.md: la llamada nativa reporta, no muta).
+##
+## NOTA (Fase 2): PROJ_ZONE y PROJ_MISSILE no pasan por el batch nativo —
+## se resuelven siempre en GDScript (_tick_zone/_tick_missile), incluso con
+## backend nativo. Zona porque en volumen esperado (unas pocas activas, no
+## miles) no es el costo que importa medir. Misil porque solo resuelve
+## impacto una vez, al llegar (ttl<=0) — no hace una consulta de colisión
+## por tick como los demás, así que no hay nada que ganar metiéndolo en el
+## batch. Ver docs/fase2-plan-proyectiles.md, "Qué no entró a SimHotPath".
+func tick_native(delta: float) -> void:
+	hits_last_tick = 0
+
+	# _dead_marks se relee más abajo por índice después de que este loop ya
+	# hizo swap-remove sobre el store — sin este clear, un slot que termina
+	# ocupado por una zona/misil vivo (que nunca escribe acá) podría leer
+	# basura de un frame anterior y liberarse por error.
+	for idx in proj_store.active_count:
+		_dead_marks[idx] = 0
 
 	var i := 0
 	while i < proj_store.active_count:
-		if _dead_marks[i] == 1:
-			var last := proj_store.active_count - 1
-			if i != last:
-				_dead_marks[i] = _dead_marks[last]
+		var t := proj_store.type_id[i]
+		var dead := false
+		if t == PROJ_ZONE:
+			dead = _tick_zone(i, delta)
+		elif t == PROJ_MISSILE:
+			dead = _tick_missile(i, delta)
+		else:
+			if t == PROJ_HOMING:
+				_steer_homing(i)
+			proj_store.positions[i] += proj_store.velocities[i] * delta
+			proj_store.ttl[i] -= delta
+			dead = proj_store.ttl[i] <= 0.0
+			_dead_marks[i] = 1 if dead else 0
+
+		if dead:
 			proj_store.release(i)
+			# el swap-remove trajo una entidad nueva a este índice — pero
+			# ya procesamos zona/misil arriba, así que es seguro reprocesar
+			# lo que cayó acá en la misma vuelta (no incrementamos i).
 		else:
 			i += 1
+
+	if skip_collision:
+		return
+
+	var count := proj_store.active_count
+	var result: Dictionary = native.find_collisions(
+		proj_store.positions, proj_store.type_id, proj_store.last_hit_enemy, proj_store.splash_radius,
+		count,
+		enemy_store.positions, enemy_store.active_count,
+		HIT_RADIUS, hash.cell_size
+	)
+
+	var primary: PackedInt32Array = result.get("primary", PackedInt32Array())
+	var splash: PackedInt32Array = result.get("splash", PackedInt32Array())
+
+	var j := 0
+	while j < primary.size():
+		var p_idx := primary[j]
+		var e_idx := primary[j + 1]
+		# PROJ_ZONE/PROJ_MISSILE ya se removieron del store más arriba en
+		# este mismo tick, así que p_idx acá siempre es un tipo "viajero"
+		# todavía vivo — no hace falta filtrarlos de nuevo.
+		enemy_store.health[e_idx] -= proj_store.damage[p_idx]
+		hits_last_tick += 1
+		proj_store.last_hit_enemy[p_idx] = e_idx
+		proj_store.hits_remaining[p_idx] -= 1
+		if proj_store.hits_remaining[p_idx] <= 0:
+			_dead_marks[p_idx] = 1
+		j += 2
+
+	j = 0
+	while j < splash.size():
+		var p_idx := splash[j]
+		var e_idx := splash[j + 1]
+		enemy_store.health[e_idx] -= proj_store.damage[p_idx]
+		j += 2
+
+	var k := 0
+	while k < proj_store.active_count:
+		if k < count and _dead_marks[k] == 1:
+			var last := proj_store.active_count - 1
+			if k != last and last < count:
+				_dead_marks[k] = _dead_marks[last]
+			proj_store.release(k)
+		else:
+			k += 1

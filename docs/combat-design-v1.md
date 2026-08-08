@@ -58,6 +58,26 @@ proyectil** (`dot_dps`, `dot_time_left`). Cero costo adicional en la fila de
 proyectil, que es la que más se multiplica a esta escala (6.000-8.000 simultáneos
 contra 1.500-2.000 enemigos).
 
+> **Nota de diseño (PM, 08-ago) — representación visual del estado, no
+> confundir con el slot mecánico.** El slot de DoT ya es único y sin
+> stackeo (arriba) — eso resuelve el costo *mecánico*. Falta el costo
+> *visual*: torres de fuente distinta (láser, lanzallamas, y a futuro
+> veneno/hielo de `docs-torretas-diseno.md` categoría D) van a querer
+> mostrar un estado en el enemigo ("prendido fuego", "envenenado",
+> "congelado"). Mientras el esquema siga en un slot único, esto es gratis
+> — el estado visual sigue 1:1 al `dot_dps` activo, no hay ambigüedad.
+> **Pero si más adelante se permite más de un efecto simultáneo real**
+> (ej. quemado + congelado a la vez, categorías D/E/F), la regla por
+> defecto es: **un solo estado visual a la vez por enemigo**, aunque haya
+> más de un estado *efectivo* activo — elegido por prioridad o por el más
+> reciente, no por "dibujar todos los que apliquen". Miles de enemigos con
+> múltiples overlays simultáneos es exactamente el tipo de costo que
+> `docs/diseno-grafico.md` (sección 4) ya identificó como el riesgo real de
+> VFX, no el sprite base. No es una decisión a tomar ahora — categorías D/E/F
+> siguen deferidas (`fase2-plan-proyectiles.md`) — es la restricción a
+> respetar cuando se retomen, para no diseñar un sistema de estados que
+> nadie pueda pagar en runtime.
+
 ### 5. Cadenas (rebote entre enemigos)
 **Mecánica:** al impactar, el daño salta a los N enemigos más cercanos al punto de
 impacto, usando **el mismo hash espacial que ya construye el sistema de colisión**

@@ -15,16 +15,68 @@ var fire_rate: PackedFloat32Array
 var cooldown_left: PackedFloat32Array
 var damage: PackedFloat32Array
 var proj_extra: PackedFloat32Array
+var dot_linger: PackedFloat32Array
 
 ## type_id → {range, fire_rate, damage, proj_type, proj_extra}. proj_type
 ## usa las constantes PROJ_* de projectile_system.gd (0=recto, 1=homing,
-## 2=perforante, 3=splash) — acá van como literales para no crear una
-## dependencia circular entre los dos scripts.
+## 2=perforante, 3=splash, 4=misil, 5=zona) más dos modos que no spawnean
+## proyectil (6=láser, 7=riel — TOWER_MODE_* abajo) — acá van como
+## literales para no crear una dependencia circular entre los dos scripts.
+## Congelamiento de 7 tipos (fase2-plan-proyectiles.md, sección 3, decisión
+## de alcance del director 08-ago) — Racimo y las categorías D/E/F de
+## docs-torretas-diseno.md quedan deferidas a propósito.
+const TOWER_MODE_BEAM := 6  # láser: DPS continuo mientras hay contacto, sin ProjectileStore
+const TOWER_MODE_RAIL := 7  # riel: carga + hitscan instantáneo en línea, sin ProjectileStore
+
+## Familia BEAM (PM, 08-ago — cristaliza la tarjeta "confirmar arquitectura
+## del láser"): tanto láser como lanzallamas son un rectángulo de área
+## efectiva que parte de la torreta — no un punto ni un círculo. Mismos 4
+## parámetros para los dos, solo cambian los valores:
+##   - `range`   → largo del rectángulo (ya existía, se reusa tal cual).
+##   - `proj_extra` → ancho del rectángulo, repurpuesto para filas BEAM
+##     (hoy sin uso en la fila de láser — antes era 0.0 porque no aplicaba).
+##     Angosto y largo en láser; ancho y corto en lanzallamas.
+##   - `damage`  → DPS por tick (no daño directo), como ya hacía láser.
+##   - `dot_linger` (NUEVO, 1 campo) → cuánto `dot_time_left` se refresca
+##     cada tick de contacto. Antes era `LASER_GRACE` (0.4, hardcodeado y
+##     compartido) en tower_system.gd — ahora es dato por fila, así
+##     lanzallamas puede tener una duración mayor sin tocar código.
+## Geometría de referencia ya escrita y probada: `_tick_rail()` en
+## tower_system.gd hace exactamente este chequeo de corredor
+## (`along = to_e.dot(dir)`, `perp.length_squared() <= hit_width_sq`) para
+## riel — es la base a reusar/generalizar para láser y lanzallamas, no una
+## consulta nueva desde cero.
+##
+## Estado de implementación (no confundir "dato cargado" con "mecánica
+## viva"): la fila 6 (láser) ya usa `TOWER_MODE_BEAM` y corre, pero
+## `_tick_laser()` hoy sigue siendo círculo + un solo objetivo (el más
+## cercano) — todavía no lee `proj_extra`/`dot_linger` como rectángulo. La
+## fila 5 (lanzallamas) queda **a propósito** con `proj_type: 5` (PROJ_ZONE)
+## sin tocar por ahora — los valores de abajo son el diseño objetivo, listos
+## para cuando alguien generalice `_tick_laser()` a un `_tick_beam()`
+## compartido que sí resuelva el rectángulo para las dos filas. Migrar la
+## fila 5 a `TOWER_MODE_BEAM` *antes* de que exista esa lógica generalizada
+## haría que lanzallamas se comporte como un láser angosto de un solo
+## blanco — silenciosamente mal, no un crash. Ver `fase2-plan-proyectiles.md`
+## para el detalle completo, incluida la ganancia de rendimiento esperada
+## (deja de consumir `ProjectileStore`/`hash.query_nearby()` por tick, que
+## es la causa exacta que encontró `fase2-benchmark-conjunto.md`).
 const TOWER_TYPE_STATS := {
 	0: {"range": 220.0, "fire_rate": 0.6, "damage": 6.0, "proj_type": 0, "proj_extra": 0.0},   # recta
 	1: {"range": 260.0, "fire_rate": 1.1, "damage": 5.0, "proj_type": 1, "proj_extra": 0.0},   # homing
 	2: {"range": 190.0, "fire_rate": 0.9, "damage": 4.0, "proj_type": 2, "proj_extra": 3.0},   # perforante (3 impactos)
 	3: {"range": 170.0, "fire_rate": 1.4, "damage": 7.0, "proj_type": 3, "proj_extra": 42.0},  # splash (radio 42px)
+	4: {"range": 240.0, "fire_rate": 1.6, "damage": 9.0, "proj_type": 4, "proj_extra": 46.0},  # misil (splash radio 46px al llegar)
+	# zona/lanzallamas — proj_type sigue en 5 (PROJ_ZONE) A PROPÓSITO, ver nota de
+	# familia BEAM arriba. range/proj_extra/dot_linger ya son el diseño objetivo
+	# (rectángulo ancho 70px × largo 90px, dps bajo, linger largo) pero
+	# _tick_zone() (projectile_system.gd) todavía los ignora — sigue usando
+	# proj_extra como radio circular y ZONE_LIFE (tower_system.gd) en vez de
+	# dot_linger hasta que se migre a _tick_beam().
+	5: {"range": 90.0, "fire_rate": 0.0, "damage": 3.0, "proj_type": 5, "proj_extra": 70.0, "dot_linger": 1.6},
+	# láser — familia BEAM, rectángulo angosto y largo, linger corto.
+	6: {"range": 200.0, "fire_rate": 0.0, "damage": 8.0, "proj_type": TOWER_MODE_BEAM, "proj_extra": 24.0, "dot_linger": 0.4},
+	7: {"range": 260.0, "fire_rate": 1.2, "damage": 26.0, "proj_type": TOWER_MODE_RAIL, "proj_extra": 14.0}, # riel (ancho de corredor, ya vivía como RAIL_HIT_WIDTH hardcodeado)
 }
 
 ## Modo desarrollo: todas las torres alcanzan cualquier punto del nivel, para
@@ -34,16 +86,20 @@ const TOWER_TYPE_STATS := {
 ## queda con los rangos reales para cuando se calibre el juego de verdad;
 ## poner esto en 0.0 (o borrar la línea) vuelve a usar esos valores tal cual.
 # TODO(calibración de combate): DEV_RANGE_OVERRIDE y DEV_FIRE_RATE_OVERRIDE
-# (ambas const, abajo) siguen activas desde la verificación de los 4 tipos de
+# (ambas abajo) siguen activas desde la verificación de los 4 tipos de
 # proyectil y el stress test de gráficos/animación (docs/fase2-stress-test.md).
 # Poner las dos en 0.0 antes de calibrar el juego de verdad — mientras sigan
 # así, ninguna corrida refleja el balance real de TOWER_TYPE_STATS.
-const DEV_RANGE_OVERRIDE := 2000.0
+## `static var`, no `const`: el benchmark de pico conjunto
+## (stress_main.gd, mode=joint) las pisa a 0.0 en tiempo de ejecución para
+## esa corrida específica — TOWER_TYPE_STATS real, tal como pidió el
+## director — sin tener que comentar/descomentar código a mano.
+static var DEV_RANGE_OVERRIDE := 2000.0
 
 ## Mismo espíritu que DEV_RANGE_OVERRIDE, para la cadencia de disparo — usado
 ## por la simulación de estrés (30 torres disparando rápido). 0.0 (o borrar
 ## la línea) vuelve a usar el fire_rate real de TOWER_TYPE_STATS.
-const DEV_FIRE_RATE_OVERRIDE := 0.06
+static var DEV_FIRE_RATE_OVERRIDE := 0.06
 
 func _init(p_capacity: int) -> void:
 	super._init(p_capacity)
@@ -52,6 +108,7 @@ func _init(p_capacity: int) -> void:
 	cooldown_left.resize(p_capacity)
 	damage.resize(p_capacity)
 	proj_extra.resize(p_capacity)
+	dot_linger.resize(p_capacity)
 
 func _swap_extra(idx: int, last: int) -> void:
 	range[idx] = range[last]
@@ -59,8 +116,9 @@ func _swap_extra(idx: int, last: int) -> void:
 	cooldown_left[idx] = cooldown_left[last]
 	damage[idx] = damage[last]
 	proj_extra[idx] = proj_extra[last]
+	dot_linger[idx] = dot_linger[last]
 
-func spawn(pos: Vector2, p_range: float, p_fire_rate: float, p_damage: float, variant: int, p_proj_extra: float = 0.0) -> int:
+func spawn(pos: Vector2, p_range: float, p_fire_rate: float, p_damage: float, variant: int, p_proj_extra: float = 0.0, p_dot_linger: float = 0.0) -> int:
 	var idx := acquire()
 	if idx == -1:
 		return -1
@@ -71,6 +129,7 @@ func spawn(pos: Vector2, p_range: float, p_fire_rate: float, p_damage: float, va
 	cooldown_left[idx] = 0.0
 	damage[idx] = p_damage
 	proj_extra[idx] = p_proj_extra
+	dot_linger[idx] = p_dot_linger
 	return idx
 
 ## Coloca una torre del tipo `tower_type` (0-3) usando TOWER_TYPE_STATS.
@@ -78,7 +137,9 @@ func spawn_typed(pos: Vector2, tower_type: int) -> int:
 	var stats: Dictionary = TOWER_TYPE_STATS[tower_type]
 	var effective_range: float = DEV_RANGE_OVERRIDE if DEV_RANGE_OVERRIDE > 0.0 else stats["range"]
 	var effective_fire_rate: float = DEV_FIRE_RATE_OVERRIDE if DEV_FIRE_RATE_OVERRIDE > 0.0 else stats["fire_rate"]
-	return spawn(pos, effective_range, effective_fire_rate, stats["damage"], tower_type, stats["proj_extra"])
+	# .get() con default 0.0: solo las filas de familia BEAM (5, 6) definen
+	# dot_linger hoy — el resto no lo necesita y no hace falta poblarlo.
+	return spawn(pos, effective_range, effective_fire_rate, stats["damage"], tower_type, stats["proj_extra"], stats.get("dot_linger", 0.0))
 
 func proj_type_of(idx: int) -> int:
 	return TOWER_TYPE_STATS[type_id[idx]]["proj_type"]

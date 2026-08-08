@@ -15,6 +15,17 @@ var target_enemy: PackedInt32Array     # homing: índice en EnemyStore, -1 = sin
 var splash_radius: PackedFloat32Array  # splash: radio de daño en área, 0 = sin splash
 var last_hit_enemy: PackedInt32Array   # evita que perforante re-pegue al mismo enemigo en el frame siguiente
 
+## Misil (fase2-plan-proyectiles.md 1.3): trayectoria fija precalculada al
+## spawnear, no re-apuntado en vuelo. `positions` se recalcula cada tick a
+## partir de estos 3 campos (Bézier cuadrático origen→control→destino,
+## control derivado, no almacenado) en vez de integrarse por velocidad —
+## ver projectile_system.gd::_tick_missile(). `traj_duration` es el valor
+## de `ttl` al spawnear (`ttl` ya cuenta regresivo, así que el progreso
+## t = 1 - ttl/traj_duration).
+var traj_origin: PackedVector2Array
+var traj_target: PackedVector2Array
+var traj_duration: PackedFloat32Array
+
 func _init(p_capacity: int) -> void:
 	super._init(p_capacity)
 	velocities.resize(p_capacity)
@@ -24,6 +35,9 @@ func _init(p_capacity: int) -> void:
 	target_enemy.resize(p_capacity)
 	splash_radius.resize(p_capacity)
 	last_hit_enemy.resize(p_capacity)
+	traj_origin.resize(p_capacity)
+	traj_target.resize(p_capacity)
+	traj_duration.resize(p_capacity)
 
 func _swap_extra(idx: int, last: int) -> void:
 	velocities[idx] = velocities[last]
@@ -33,6 +47,9 @@ func _swap_extra(idx: int, last: int) -> void:
 	target_enemy[idx] = target_enemy[last]
 	splash_radius[idx] = splash_radius[last]
 	last_hit_enemy[idx] = last_hit_enemy[last]
+	traj_origin[idx] = traj_origin[last]
+	traj_target[idx] = traj_target[last]
+	traj_duration[idx] = traj_duration[last]
 
 func spawn(pos: Vector2, vel: Vector2, life: float, dmg: float, variant: int, p_hits: int = 1, p_target: int = -1, p_splash_radius: float = 0.0) -> int:
 	var idx := acquire()
@@ -48,3 +65,10 @@ func spawn(pos: Vector2, vel: Vector2, life: float, dmg: float, variant: int, p_
 	splash_radius[idx] = p_splash_radius
 	last_hit_enemy[idx] = -1
 	return idx
+
+## Solo para PROJ_MISSILE — llamar justo después de spawn() con el mismo
+## `idx`. `duration` normalmente es la misma `life` que se pasó a spawn().
+func set_trajectory(idx: int, origin: Vector2, target: Vector2, duration: float) -> void:
+	traj_origin[idx] = origin
+	traj_target[idx] = target
+	traj_duration[idx] = maxf(duration, 0.001)
