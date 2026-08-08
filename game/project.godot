@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="TowerDefense — Spike de escala (Sprint 2)"
-run/main_scene="res://scenes/Benchmark.tscn"
+config/name="TowerDefense"
+run/main_scene="res://scenes/Level1.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [display]

@@ -8,6 +8,16 @@ explícito en `directorsuggestions.md`: cada campo agregado a la fila de datos
 *después* de empezar a construir tiene costo de migración — este documento es lo
 que se congela *antes*.
 
+> **Director — enmienda retroactiva, 08-ago:** `game/sim/projectile_system.gd`
+> (Fase 2, pantalla 1) ya implementa splash como uno de los 4 tipos de
+> proyectil de la primera pantalla jugable — lo encontré en la revisión del
+> stress test, no lo pedí yo. Este documento decía explícitamente "fuera de
+> v1" para splash. No lo reviert: el campo que agrega (`splash_radius`, 1
+> float) es barato, la implementación reusa `hash.query_nearby()` sin
+> estructura nueva, y funciona — no hay motivo técnico para sacarlo. Pero
+> "congelado" pierde sentido si se puede saltar en silencio, así que esto
+> queda ratificado acá, por escrito, no asumido. Ver modificador 6 más abajo.
+
 ---
 
 ## Modificadores incluidos en v1
@@ -56,16 +66,27 @@ impacto, usando **el mismo hash espacial que ya construye el sistema de colisió
 costo por frame si muchos proyectiles con cadena impactan en el mismo tick.
 **Costo en el esquema:** **+1 campo** (`chains_remaining`, entero chico).
 
+### 6. Splash (daño en área) — agregado 08-ago, ver enmienda arriba
+**Mecánica:** al impactar, además del enemigo golpeado, daña a todos los enemigos
+dentro de `splash_radius` del punto de impacto. Implementado en
+`projectile_system.gd::_apply_hit()` reusando `hash.query_nearby()` — la misma
+consulta de 9 celdas que ya hace el chequeo de colisión, sin estructura nueva.
+Sin tope de enemigos afectados por explosión en v1 (a diferencia de cadenas, que sí
+tienen tope de saltos) — vale la pena vigilarlo en balance si una torre splash
+contra un enjambre denso empieza a costar frame time, pero no se midió problema
+todavía a la escala de la pantalla 1 (30 torres/300 enemigos, 144fps sin caídas).
+**Costo en el esquema:** **+1 campo** (`splash_radius`, float; 0 = sin splash).
+
 ---
 
 ## Fuera de v1 — fase futura, explícito
 
-- Cualquier modificador de daño no listado arriba: daño en área/splash, marcar y
-  detonar, ejecución/finisher, control de multitud más allá del `hit_flash`
-  visual que ya existe (stun, slow, knockback).
+- Marcar y detonar, ejecución/finisher, control de multitud más allá del
+  `hit_flash` visual que ya existe (stun, slow, knockback).
 - Múltiples DoT simultáneos o stackeo de DoT — v1 es un solo slot que se refresca.
 - Más de 2 elementos de resistencia.
 - Cadenas sin tope de saltos.
+- Splash sin tope de enemigos afectados, si el balance lo pide más adelante.
 
 Todo lo anterior queda para una versión futura del diseño de combate, no de v1.
 
@@ -80,6 +101,7 @@ Todo lo anterior queda para una versión futura del diseño de combate, no de v1
 | `element_id` | int chico (0/1) | Resistencias elementales |
 | `hits_remaining` | int chico | Perforación |
 | `chains_remaining` | int chico | Cadenas |
+| `splash_radius` | float | Splash (agregado 08-ago) |
 
 **Fila de ENEMIGO — campos nuevos:**
 

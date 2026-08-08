@@ -50,7 +50,12 @@ func get_cell(key: Vector2i) -> PackedInt32Array:
 ## índice de EnemyStore a distancia <= sqrt(radius_sq), o -1. Todo en una
 ## sola llamada (sin round-trips de método por celda) — es lo que
 ## projectile_system.gd usa en el batch de colisión.
-func find_hit(pos: Vector2, radius_sq: float, enemy_positions: PackedVector2Array) -> int:
+## `exclude_idx` (Fase 2, proyectiles perforantes): salta ese índice en la
+## búsqueda, para que un proyectil que ya pegó en un enemigo no vuelva a
+## pegarle en el frame siguiente solo por seguir superpuesto — sin esto, un
+## perforante gastaría todos sus impactos contra el mismo enemigo antes de
+## alejarse lo suficiente.
+func find_hit(pos: Vector2, radius_sq: float, enemy_positions: PackedVector2Array, exclude_idx: int = -1) -> int:
 	var base := _key(pos)
 	for dx in range(-1, 2):
 		for dy in range(-1, 2):
@@ -58,6 +63,8 @@ func find_hit(pos: Vector2, radius_sq: float, enemy_positions: PackedVector2Arra
 			if not _cells.has(k):
 				continue
 			for e_idx in _cells[k]:
+				if e_idx == exclude_idx:
+					continue
 				if enemy_positions[e_idx].distance_squared_to(pos) <= radius_sq:
 					return e_idx
 	return -1
