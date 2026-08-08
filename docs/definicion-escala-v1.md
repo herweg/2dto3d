@@ -90,7 +90,9 @@ si al ver los datos del spike el criterio no se siente correcto.
 **Estado: CERRADO (PM, 06-ago).** **Actualizado (PM, 08-ago).**
 
 - CPU: i5-9400, 6 núcleos @2.9GHz (o equivalente)
-- GPU: AMD Radeon RX Vega (integrada) o equivalente
+- GPU: AMD Radeon RX Vega 56, 8GB, **discreta** (corregido 08-ago — ver
+  objeción del director y respuesta de la PM más abajo; la línea original
+  decía "integrada", lo cual no existe en esta combinación de CPU)
 - RAM: 8 GB (sin cambios)
 
 **Decisión (PM, 08-ago):** se redefine el hardware mínimo como el de la
@@ -104,6 +106,66 @@ hace falta correrlos de nuevo en otra máquina.
 
 Gama media original (06-ago, referencia histórica): CPU 4 núcleos moderno,
 GPU eq. GTX 1660 / RX 580, 8GB RAM.
+
+> **Director — objeción, 08-ago. No acepto esto como resuelto.** La propia
+> línea de arriba dice "AMD Radeon RX Vega **(integrada)**" en la misma
+> máquina que un **i5-9400** — un CPU Intel de escritorio. No existe ese
+> combo: Intel no trae gráficos integrados AMD, y un i5-9400 de socket no es
+> una APU. O es una Radeon RX Vega **discreta** (RX Vega 56/64), que es una
+> gama bastante *por encima* de una GTX 1660/RX 580 — no "sin diferencia
+> significativa" como dice la decisión de arriba — o directamente nadie
+> verificó qué GPU tiene esta máquina antes de redefinir T4 con ella.
+>
+> Esto no es un detalle de forma. Firmé `fase2-motor-cristalizado.md`
+> asumiendo margen de sobra en los tres ejes contra hardware mínimo real. Si
+> la GPU real de esta máquina es una Vega discreta, ese margen puede no
+> existir para alguien con una GTX 1660/RX 580 de verdad — exactamente el
+> escenario que la advertencia original de "cota optimista" quería señalar,
+> y que esta redefinición dio por resuelto sin comprobarlo.
+>
+> **No revierto la decisión — la PM la puede sostener — pero no la doy por
+> cerrada hasta que pase una de estas dos cosas:**
+> 1. Se confirma qué GPU tiene realmente la máquina de desarrollo (Administrador
+>    de dispositivos / `dxdiag` alcanza, dos minutos) y, si es Vega discreta,
+>    se decide con los ojos abiertos si el estudio acepta ese riesgo para
+>    usuarios con GTX 1660/RX 580 real, o se consigue una máquina más
+>    representativa para remedir; o
+> 2. La PM confirma explícitamente que la redefinición es intencional pese a
+>    la diferencia de GPU (una llamada de negocio legítima — "ya no nos
+>    importa esa gama baja" — pero tiene que decirse así, no como "no hay
+>    diferencia significativa").
+>
+> Hasta que uno de los dos pase, trato el margen reportado en
+> `fase2-motor-cristalizado.md` como **no confirmado en hardware mínimo
+> real**, igual que antes del 08-ago.
+
+> **PM, 08-ago — respuesta a la objeción.** Confirmado: es una Vega 56 8GB
+> **discreta** (corregido arriba), no integrada — el director tenía razón en
+> que la línea original estaba mal. La autoricé yo. No es la gama "media"
+> que habíamos definido el 06-ago, pero tampoco es gama alta moderna (Vega 56
+> es de 2017); la trato como una base razonable dado que es la única máquina
+> de test disponible ahora. Propuesta concreta para compensar la diferencia:
+> **todo benchmark que se corra en esta máquina tiene que llegar a ~120% del
+> objetivo real** (20% de margen arbitrario, no derivado de nada más fino)
+> antes de darlo por bueno — si algo pasa 60fps con el objetivo pero no con
+> ese 20% extra, no lo cuento como validado. Es un parche mientras no
+> tengamos otra máquina para medir, no una solución definitiva.
+
+> **Director — acepto, con un matiz que vale la pena que quede escrito.** El
+> 20% es razonable como colchón general y prefiero esto — una decisión
+> explícita con un número, aunque sea arbitrario — a la redefinición sin
+> comprobar que había antes. Un matiz técnico que cambia cuánto me preocupa
+> esto: **todo lo medido hasta ahora es CPU-bound** (consulta al hash
+> espacial, targeting de torres por fuerza bruta — GDScript de un solo hilo),
+> no GPU-bound. El CPU de esta máquina (i5-9400, 6 núcleos) está mucho más
+> cerca de la spec original que la GPU — así que el riesgo real que este 20%
+> tiene que cubrir hoy es más chico de lo que un GTX1660-vs-Vega56 sugeriría
+> a primera vista. Eso cambia **cuándo** este parche deja de alcanzar: en
+> cuanto el trabajo de gráficos meta algo con costo real de GPU (shaders más
+> pesados, VFX con overdraw, partículas) en vez de los quads planos/sprites
+> simples de hoy, ahí sí la brecha de GPU empieza a importar de verdad y el
+> 20% plano deja de ser suficiente sin revisarlo. Lo dejo anotado para
+> retomarlo en ese momento, no ahora — **T4 queda cerrado con esta condición.**
 
 ---
 

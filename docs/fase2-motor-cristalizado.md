@@ -84,3 +84,108 @@ que puede empujar esos números. Mejor tener el build reproducible documentado
 con la cabeza fría ahora que reconstruirlo a las apuradas si `SimHotPath`
 hace falta extender en medio de la calibración. No bloquea nada de lo de
 arriba — puede ir en paralelo.
+
+---
+
+## Respuesta del director a los pendientes de esta ronda (08-ago)
+
+**Gráficos/animación (commit `67a9165`): aprobado, sin objeciones.** El
+diseño A/B es correcto — mismo quad, mismo `ENEMY_LEVELS`, una sola variable
+real — y las curvas se superponen dentro del ruido (16.68ms vs 17.04ms en el
+peor punto medido). La segunda revisión que confirma que el código coincide
+con lo reportado *y* que el resultado es lo que predice el modelo de
+`MultiMeshInstance2D` (no solo "medimos y dio bien") es exactamente el
+estándar que quiero para este tipo de hallazgo. El equipo de gráficos puede
+seguir con swap de textura por store — no hace falta UV por instancia a esta
+escala.
+
+**Catch de `referencia-orc-problem.md`: correcto, lo acepto sin peros.**
+Firmé este mismo documento tratando la adopción de torres+carril como
+resuelta cuando en realidad era mi recomendación sin ratificación escrita
+todavía — el equipo ya había construido sobre ella (`89fbbd9`) antes de que
+existiera el registro formal. Es exactamente el tipo de brecha entre "lo que
+el código ya hizo" y "lo que quedó documentado" que un auditor tiene que
+cazar. Ya está cerrado con firma compartida — no hace falta que yo agregue
+nada más ahí.
+
+**Build reproducible de Rust: acepto la sugerencia.** No es urgente hoy, pero
+tiene el perfil exacto de "barato ahora, caro después" — documentar el
+proceso (incluido el quirk de Smart App Control/MSVC) mientras todavía
+alguien se acuerda de memoria, no cuando la calibración ya esté empujando
+homing/splash y haga falta con apuro. Lo sumo como tarea de baja prioridad en
+paralelo, no bloqueante — ver tarjetas abajo.
+
+**Hardware mínimo (T4): objeción formal, ver `definicion-escala-v1.md`.** No
+acepto la redefinición como resuelta — la propia descripción de la máquina
+("i5-9400" + "Radeon RX Vega (integrada)") es una combinación de hardware que
+no existe, lo que me dice que nadie verificó la GPU real antes de dar por
+cerrada la advertencia de "cota optimista". Mientras esto no se resuelva, la
+tabla de márgenes de este mismo documento (arriba) queda con un asterisco:
+son márgenes contra la máquina de desarrollo, no confirmados contra hardware
+mínimo real. Detalle y las dos salidas posibles en `definicion-escala-v1.md`.
+
+### El número nuevo: ~20 torretas, ~2.000 enemigos, ~3.000 proyectiles (pico, última pantalla)
+
+Es un número más chico y más disciplinado que el T2 original (que llegaba a
+pico de 10.000-12.000 proyectiles) — buena señal, es diseñar contra lo que ya
+se sabe que funciona en vez de contra una cifra aspiracional. Evaluado eje
+por eje contra lo ya medido:
+
+- **Torres (20):** no discuto nada acá. El techo medido (~800, encima con
+  `DEV_FIRE_RATE_OVERRIDE` disparando casi sin pausa) le saca 40× de margen a
+  20 torres incluso a cadencia real. Este eje deja de ser una preocupación en
+  esta pantalla.
+- **Enemigos (2.000):** 2,9× de margen contra el techo de enemigos solos
+  (~5.730). Cómodo en aislamiento.
+- **Proyectiles (3.000, mezclados entre ~20 tipos):** acá es donde no puedo
+  decir "aprobado" todavía. Dos motivos concretos, no una sensación:
+  1. El techo por tipo que ya midieron (2.710-4.410) se midió con **400
+     enemigos de fondo fijos** — no 2.000. Más enemigos poblando la grilla
+     espacial no es gratis para la consulta de colisión; nadie corrió ese
+     número con la población de enemigos real.
+  2. Esos techos se midieron **un tipo de proyectil a la vez** (barrido
+     puro recto, puro homing, etc.) — el juego real dispara los ~20 tipos
+     simultáneamente. 3.000 proyectiles mezclados, si una porción real cae
+     en homing/splash (los tipos más caros, techo ~2.700-2.780 en soledad),
+     puede estar más cerca del límite de lo que sugiere mirar solo el techo
+     del tipo más barato.
+
+  Ninguno de los dos es motivo para frenar gráficos ni para asustarse — es
+  exactamente el mismo hueco que ya señaló el auditor en el punto 6 (nunca se
+  forzó el pico exacto conjunto), ahora con un número real al que apuntarlo
+  en vez del T2 abstracto.
+- **Contenido (20 torretas distintas):** con datos, no solo con techo de fps.
+  Las 4 torres de hoy cubren 4 de los ~13 comportamientos de
+  `projectile-variety-v1.md` más 3 de los 5 modificadores de
+  `combat-design-v1.md` (crítico ya resuelto al spawn sin costo de esquema,
+  perforación, splash). **Elemento, DoT y cadenas todavía no tienen fila en
+  `ProjectileStore`** — sin esos tres, 20 torres realmente distintas es
+  ambicioso solo con variantes de movimiento; con los 5 modificadores
+  combinables sobre ~13 comportamientos, 20 es holgado. Esto no es
+  bloqueante para nada de lo de hoy, pero sí es trabajo de motor real
+  pendiente antes de que calibración pueda darle contenido a las 20.
+
+### Respuesta directa: sí, tarjeta para la Mesa de Developers — y la reescribo contra el número real
+
+No lo dejaría como "forzar el pico de 12.000/3.000" (T2 original) — ese
+número ya no es el que importa. La tarjeta que pondría:
+
+> **Verificación de pico conjunto — número real de diseño.** Un solo
+> benchmark: 2.000 enemigos de fondo (no 400), rampa de proyectiles a 3.000
+> con mezcla realista de los tipos ya implementados (no `mixed` uniforme
+> ni un tipo puro), 20 torres a fire_rate/range de `TOWER_TYPE_STATS` real
+> (`DEV_FIRE_RATE_OVERRIDE`/`DEV_RANGE_OVERRIDE` en 0.0 para esta corrida
+> específica, sin esperar a la calibración completa). Mismo método, mismo
+> `BenchmarkLogger`. Resultado esperado: un sí/no contra 60fps, no una
+> reafirmación de lo que ya se sabe por partes.
+
+La empujaría junto con — no antes ni después de — la verificación de GPU de
+T4, porque las dos son la misma clase de tarea ("confirmar un supuesto antes
+de que el contenido real dependa de él") y tiene sentido cerrarlas en la
+misma pasada. El build reproducible de Rust puede ir en paralelo con
+cualquiera de las dos — no depende de ninguna.
+
+Lo que sí seguiría en paralelo sin esperar nada de esto: gráficos/animación
+(ya validado) y el diseño de las 20 torres en el papel (qué comportamiento +
+qué modificadores por torre) — ninguno de los dos necesita el número
+confirmado, solo lo necesita "contenido real" entra a producción.
