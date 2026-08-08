@@ -219,3 +219,143 @@ que ya deja planteadas la sección 4. No cambio el resto de este documento —
 el diagnóstico de la sección 2 (el problema de las ~300 zonas sintéticas) y
 la corrección de `ZONE_FIXED_COUNT` siguen siendo válidos y bien
 razonados independientemente de este hallazgo.
+
+---
+
+## 6. Re-corrida con el fix + `proj-type=realistic` — segundo bug encontrado, número final (08-ago)
+
+Re-corrí `mode=joint proj-type=realistic` como pedía la sección 5. Resultado
+crudo, con el bug de `_dead_marks` ya corregido: **~40-45fps en régimen
+sostenido, con valles de 32fps.** Peor que el 58-65fps reportado, no mejor —
+la sospecha de la sección 5 ("podría ser optimista") se confirma en la
+dirección correcta, pero por una razón distinta a la que ahí se anotaba.
+
+**Diagnóstico, mismo método de la sección 2** (aislar variable por variable,
+usando los parámetros de diagnóstico que ya trae `stress_main.gd`):
+
+| Configuración aislada | Resultado |
+|---|---|
+| 0 torres (solo enemigos+proyectiles a escala real) | 70-75fps — el piso sin torres está sano |
+| 24 torres, todos los tipos, `proj-type=0` (recto puro) | 32-45fps — la caída no depende del tipo de proyectil inyectado |
+| 24 torres sin láser/riel en el ciclo (`tower-cycle=6`) | 32-45fps — prácticamente igual, tampoco es láser/riel |
+| 1 torre (ciclo sin láser/riel) | 68-77fps — una torre sola no cuesta nada |
+| 6 torres (1 de cada tipo 0-5, incluida 1 lanzallamas) | 68-73fps |
+| 12 torres (2 de cada tipo, 2 lanzallamas) | 63-67fps |
+| 18 torres (3 de cada tipo, **3 lanzallamas**) | 37-45fps — el salto |
+| 24 torres (4 de cada tipo, 4 lanzallamas) | 32-45fps |
+
+El salto no lineal entre 2 y 3 torres lanzallamas (fila 5 de
+`TOWER_TYPE_STATS`) señaló la fila exacta. Causa: al rediseñar la familia
+BEAM (commit anterior), la fila 5 quedó con `fire_rate: 0.0` como si fuera
+a migrar a `TOWER_MODE_BEAM` (que no usa cooldown, se salta ese chequeo por
+diseño) — pero `proj_type` se dejó **a propósito** en `5` (`PROJ_ZONE`,
+documentado en `tower_store.gd`), que sí pasa por el camino normal de
+`TowerSystem.tick()`. Ahí, `fire_rate: 0.0` no significa "sin cooldown por
+diseño" — significa "recarga instantánea": la torre plantaba una
+`PROJ_ZONE` nueva **cada frame**, sin ningún límite, mientras hubiera un
+enemigo a 90px. A 2.400 enemigos eso siempre es cierto. Cada zona activa
+hace `hash.query_nearby()` por tick (la misma operación que la sección 2
+ya había identificado como cara) — con 3-4 torres lanzallamas
+retroalimentando la población de zonas sin freno, el costo escala mucho
+peor que lineal con la cantidad de torres.
+
+No era un artefacto del inyector sintético esta vez — era un dato real de
+`TOWER_TYPE_STATS`, así que afectaba (o va a afectar) al juego jugable
+también, no solo al benchmark, en cuanto exista más de una torre
+lanzallamas cerca de tránsito de enemigos.
+
+**Fix aplicado** (`tower_store.gd`): `fire_rate` de la fila 5 vuelve a
+`2.2` (el valor que tenía antes del rediseño BEAM), con comentario dejando
+explícito que es un valor puente hasta que la fila migre de verdad a
+`_tick_beam()` — ver la nota "Estado de implementación" ya existente en el
+mismo archivo.
+
+### Resultado final, con los dos fixes aplicados
+
+**2.400 enemigos, ~3.300-3.600 proyectiles (mezcla realista, 5 tipos
+viajeros + 10 zonas fijas), 24 torres reales (8 tipos, `fire_rate` real),
+`proj-type=realistic` explícito, backend nativo: 55-65fps sostenido,
+promedio ~59-60fps, piso ~54.5fps.**
+
+Curva completa en `stress_joint_1786209078.csv`
+(`game/benchmark_results/`).
+
+**Un detalle que vale la pena dejar anotado:** el 58-65fps que reportaba
+originalmente la sección 3 — medido con *ambos* bugs activos a la vez
+(dead-marks matando zonas/misiles de más, fila 5 creándolas de más) —
+terminó cayendo casi en el mismo rango que el número ya verificado. No fue
+que los bugs no importaran: fue que tiraban en direcciones opuestas y se
+cancelaron parcialmente por casualidad. Ninguno de los dos se detectó
+midiendo el fps final — los dos aparecieron leyendo código con el resultado
+ya en la mano y preguntando "¿de dónde sale este número, literalmente?",
+no "¿el número parece razonable?". Vale la pena como recordatorio general,
+no solo para este documento.
+
+### Veredicto sobre la sección 4
+
+Con el número ya verificado (promedio ~59-60fps, piso ~54.5fps): **no pasa
+la regla del 20% que fijó la PM para T4** — un piso por debajo de 60fps
+durante parte del sostenido no es "60fps con margen", es por debajo del
+objetivo base incluso antes de contar el margen. La opción 1 de la sección 4
+("aceptar el margen ajustado") queda descartada con este dato — no es que
+esté "justo en el borde", está midiblemente por debajo en los valles.
+
+Entre las opciones 2 y 3: el hallazgo de esta sección no cambia cuál
+conviene más, sigue siendo la misma elección de siempre entre optimizar lo
+que ya está (zona a `find_hit()`, láser acotado a una cadencia) o estirar
+`SimHotPath` a zona/misil — el fix del `fire_rate` saca el ruido de la
+medición, no reemplaza esa decisión. La dejo para quien la tome, con el
+número ahora confiable para apoyarla.
+
+---
+
+## 7. Decisión del director sobre cómo bajar el costo (08-ago)
+
+**No elijo entre las opciones 2 y 3 tal como estaban planteadas — hay una
+mejor ya a medio camino, y la pido en vez de las otras dos.**
+
+`tower_store.gd` ya venía anotando que lanzallamas quedó **a propósito** en
+`PROJ_ZONE` en vez de migrar a `TOWER_MODE_BEAM` (la familia de láser)
+porque `_tick_laser()` todavía no generaliza a rectángulo. Esa migración,
+cuando se haga, no es una optimización sobre el mecanismo actual de
+lanzallamas — **le saca el mecanismo actual entero**: deja de ser una fila
+en `ProjectileStore` con `ttl`/spawn/swap-remove y `hash.query_nearby()` por
+tick, y pasa a ser lo mismo que ya es láser — un chequeo directo desde la
+torre, sin tocar `ProjectileStore` para nada. Ya no hace falta
+`ZONE_FIXED_COUNT` como freno artificial si la zona deja de ocupar un slot
+del store. Es más cambio que la opción 2 (que solo le sacaba el costo de
+alocación a `query_nearby()` sin tocar el resto) y resuelve el problema en
+la raíz que ya diagnosticó la sección 2, no lo mitiga.
+
+**Una condición, no la doy por gratis solo porque "probablemente" lo sea**
+(esa palabra ya apareció una vez en este mismo archivo sobre este mismo
+tema, sin medirla — no la repito sin dato encima): el chequeo de rectángulo
+compartido (`_tick_beam()`) tiene que filtrar candidatos contra el
+`SpatialHash` (mismo patrón de 9 celdas que ya usa `find_hit()`/
+`query_nearby()`), **no** escanear `enemy_store.active_count` completo como
+hace hoy `_tick_rail()`. Riel puede pagarse ese lujo porque dispara cada
+`RAIL_CHARGE` = 1.2s; láser y lanzallamas van a correr **todos los ticks**
+— si `_tick_beam()` termina barriendo 2.400 enemigos por torre por frame,
+cambiamos una consulta acotada por hash por un brute-force sin acotar, que
+es peor, no mejor.
+
+**Pedido concreto para cuando el equipo técnico toque esta parte** (junto
+con la reconciliación de nombres del catálogo que ya se acordó):
+
+1. Generalizar `_tick_laser()`/`_tick_zone()` a un `_tick_beam()` compartido
+   con geometría de rectángulo (usa `range` como largo y `proj_extra` como
+   ancho, tal como ya quedó diseñado en `TOWER_TYPE_STATS`), filtrando
+   candidatos por `SpatialHash`, no por barrido completo.
+2. Migrar la fila 5 (lanzallamas) de `proj_type: PROJ_ZONE` a
+   `TOWER_MODE_BEAM` — deja de spawnear en `ProjectileStore`.
+3. Sumar cadencia de reselección de objetivo acotada (6-10 veces/seg, no
+   60) para ambos — el DoT ya tiene margen de linger, no hace falta
+   re-buscar blanco en cada frame para que se sienta continuo.
+4. Re-correr `mode=joint` con el mismo método de las secciones 5-6 (número
+   crudo, diagnóstico si no cierra, no asumir) antes de dar esto por
+   resuelto.
+
+Si después de esto el número sigue sin pasar el 20%, ahí sí correspondería
+la opción 3 original (estirar `SimHotPath` a zona/misil) — pero no antes de
+medir el resultado de esta migración, que ya estaba a medio camino y ataca
+la causa, no el síntoma.

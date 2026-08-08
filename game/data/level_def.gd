@@ -24,6 +24,19 @@ extends Resource
 @export var spawn_point: Vector2 = Vector2.ZERO
 @export var goal_point: Vector2 = Vector2.ZERO
 
+## Fondo/tema de la pantalla (tarjeta de motor confirmada por el director,
+## docs/diseno-grafico.md sección 2, 08-ago): hasta ahora LevelDef era
+## geometría pura, sin dónde enganchar arte de ambiente. `background_texture`
+## es opcional — null significa "Arte todavía no entregó nada para esta
+## pantalla", y se ve `background_color` plano en su lugar (no negro/default
+## del viewport). `background_rect` son coordenadas de mundo, las mismas que
+## path_rects/buildable_zones — no se infiere del resto de la geometría
+## porque el fondo (ambientación) puede exceder el carril y la zona
+## construible.
+@export var background_texture: Texture2D = null
+@export var background_color: Color = Color(0.09, 0.10, 0.08, 1.0)
+@export var background_rect: Rect2 = Rect2(-680, -400, 1400, 840)
+
 func is_in_path(pos: Vector2) -> bool:
 	for r in path_rects:
 		if r.has_point(pos):

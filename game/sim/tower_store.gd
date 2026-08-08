@@ -73,7 +73,17 @@ const TOWER_TYPE_STATS := {
 	# _tick_zone() (projectile_system.gd) todavía los ignora — sigue usando
 	# proj_extra como radio circular y ZONE_LIFE (tower_system.gd) en vez de
 	# dot_linger hasta que se migre a _tick_beam().
-	5: {"range": 90.0, "fire_rate": 0.0, "damage": 3.0, "proj_type": 5, "proj_extra": 70.0, "dot_linger": 1.6},
+	# fire_rate 2.2 (no 0.0): bug encontrado 08-ago en re-corrida del benchmark
+	# conjunto — proj_type sigue en 5 (PROJ_ZONE, cooldown-gated en
+	# TowerSystem.tick()), no TOWER_MODE_BEAM (que se salta el cooldown por
+	# diseño, ver _tick_laser()). Con fire_rate 0.0 esta fila recargaba
+	# instantáneamente y plantaba una zona nueva CADA FRAME sin límite —
+	# cientos de PROJ_ZONE simultáneas, cada una con hash.query_nearby() por
+	# tick (docs/fase2-benchmark-conjunto.md). No era artefacto del inyector
+	# sintético, era esta fila. Valor restaurado al que tenía antes del
+	# rediseño BEAM; re-evaluar cuando exista _tick_beam() y esta fila migre
+	# a TOWER_MODE_BEAM de verdad (ver nota "Estado de implementación" arriba).
+	5: {"range": 90.0, "fire_rate": 2.2, "damage": 3.0, "proj_type": 5, "proj_extra": 70.0, "dot_linger": 1.6},
 	# láser — familia BEAM, rectángulo angosto y largo, linger corto.
 	6: {"range": 200.0, "fire_rate": 0.0, "damage": 8.0, "proj_type": TOWER_MODE_BEAM, "proj_extra": 24.0, "dot_linger": 0.4},
 	7: {"range": 260.0, "fire_rate": 1.2, "damage": 26.0, "proj_type": TOWER_MODE_RAIL, "proj_extra": 14.0}, # riel (ancho de corredor, ya vivía como RAIL_HIT_WIDTH hardcodeado)

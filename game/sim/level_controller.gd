@@ -48,7 +48,7 @@ var _tower_system: TowerSystem
 
 var _enemy_render: EntityRenderSync
 var _proj_render: EntityRenderSync
-var _tower_render: EntityRenderSync
+var _tower_render: TypedRenderGroup
 
 var _spawn_timer: float = 0.0
 var _selected_tower_type: int = 0  # teclas 1-4 lo cambian — ver _unhandled_input
@@ -91,12 +91,11 @@ func _ready() -> void:
 
 	_enemy_render = EntityRenderSync.new(MAX_ENEMIES, 18.0, Color(0.75, 0.15, 0.15))
 	_proj_render = EntityRenderSync.new(MAX_PROJ, 7.0, Color(1.0, 0.9, 0.3))
-	_tower_render = EntityRenderSync.new(MAX_TOWERS, 26.0, Color(0.25, 0.35, 0.55))
+	_tower_render = TypedRenderGroup.new(TowerStore.TOWER_TYPE_STATS.size(), MAX_TOWERS, 26.0, TYPE_COLORS)
 	_proj_render.set_type_colors(TYPE_COLORS)
-	_tower_render.set_type_colors(TYPE_COLORS)
 	add_child(_enemy_render.get_node2d())
 	add_child(_proj_render.get_node2d())
-	add_child(_tower_render.get_node2d())
+	_tower_render.add_all_to(self)
 
 	_parse_cli_args()
 	queue_redraw()
@@ -189,7 +188,7 @@ func _process(delta: float) -> void:
 
 	_enemy_render.sync(_enemy_store.positions, _enemy_store.active_count)
 	_proj_render.sync(_proj_store.positions, _proj_store.active_count, _proj_store.type_id)
-	_tower_render.sync(_tower_store.positions, _tower_store.active_count, _tower_store.type_id)
+	_tower_render.sync(_tower_store.positions, _tower_store.type_id, _tower_store.active_count)
 
 	if _stress_logger:
 		_stress_logger.tick(delta, _proj_store.active_count, _enemy_store.active_count)
@@ -227,6 +226,10 @@ func _maybe_screenshot() -> void:
 			print("[level1] screenshot guardado: ", path)
 
 func _draw() -> void:
+	if _level.background_texture:
+		draw_texture_rect(_level.background_texture, _level.background_rect, false)
+	else:
+		draw_rect(_level.background_rect, _level.background_color)
 	for r in _level.buildable_zones:
 		draw_rect(r, Color(0.35, 0.35, 0.37, 1.0))
 		draw_rect(r, Color(0.55, 0.55, 0.58, 1.0), false, 3.0)
