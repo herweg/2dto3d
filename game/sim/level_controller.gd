@@ -23,16 +23,21 @@ const SPAWN_INTERVAL := 1.2
 const TOWER_MIN_SPACING := 48.0
 const SPATIAL_CELL_SIZE := 48.0
 
-## Un color por tipo (0=recta, 1=homing, 2=perforante, 3=splash) — mismo
-## índice para la torre y el proyectil que dispara, así se ve a simple
-## vista cuál tiró cuál. Evita los colores ya usados en la pantalla (rojo
-## de enemigos/meta, verde del carril, gris construible, marrón de árboles,
-## amarillo del spawn).
+## Un color por tipo — mismo índice para la torre y el proyectil que dispara
+## (los que spawnean uno), así se ve a simple vista cuál tiró cuál. Evita los
+## colores ya usados en la pantalla (rojo de enemigos/meta, verde del
+## carril, gris construible, marrón de árboles, amarillo del spawn). Mismo
+## set que TYPE_COLORS de stress_main.gd, para que un tipo se vea igual en
+## las dos pantallas.
 const TYPE_COLORS := [
 	Color(0.30, 0.55, 0.95),  # 0 recta — azul
 	Color(0.95, 0.55, 0.15),  # 1 homing — naranja
 	Color(0.65, 0.35, 0.85),  # 2 perforante — violeta
 	Color(0.15, 0.75, 0.70),  # 3 splash — verde azulado
+	Color(0.85, 0.25, 0.25),  # 4 misil ("Mortero") — rojo
+	Color(0.90, 0.55, 0.20),  # 5 lanzallamas ("Fuego") — ámbar
+	Color(0.95, 0.95, 0.30),  # 6 láser — amarillo
+	Color(0.60, 0.60, 0.65),  # 7 riel — gris acero
 ]
 
 var _level: LevelDef
@@ -45,6 +50,7 @@ var _hash: SpatialHash
 var _proj_system: ProjectileSystem
 var _lane_system: LaneEnemySystem
 var _tower_system: TowerSystem
+var _dot_system: DotSystem
 
 var _enemy_render: EntityRenderSync
 var _proj_render: EntityRenderSync
@@ -59,7 +65,7 @@ var _selected_tower_type: int = 0  # teclas 1-4 lo cambian — ver _unhandled_in
 var _quit_after: float = -1.0
 var _elapsed: float = 0.0
 var _shots_taken: Dictionary = {}
-var _shot_times: Array = [6.0, 14.0]
+var _shot_times: Array = [6.0, 14.0, 30.0]
 
 ## Simulación de estrés — 30 torres disparando rápido (DEV_FIRE_RATE_OVERRIDE)
 ## contra un objetivo sostenido de 300 enemigos, midiendo frame time con la
@@ -87,7 +93,8 @@ func _ready() -> void:
 	_hash = SpatialHash.new(SPATIAL_CELL_SIZE)
 	_proj_system = ProjectileSystem.new(_proj_store, _enemy_store, _hash)
 	_lane_system = LaneEnemySystem.new(_enemy_store, _level.waypoints, _level.obstacles, _level.obstacle_radius)
-	_tower_system = TowerSystem.new(_tower_store, _enemy_store, _proj_store)
+	_tower_system = TowerSystem.new(_tower_store, _enemy_store, _proj_store, _hash)
+	_dot_system = DotSystem.new(_enemy_store)
 
 	_enemy_render = EntityRenderSync.new(MAX_ENEMIES, 18.0, Color(0.75, 0.15, 0.15))
 	_proj_render = EntityRenderSync.new(MAX_PROJ, 7.0, Color(1.0, 0.9, 0.3))
@@ -104,6 +111,17 @@ func _parse_cli_args() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "place-test-towers":
 			_place_test_towers()
+		if arg == "place-all-towers":
+			_place_all_types_test()
+		if arg == "real-stats":
+			# Sin esto, DEV_RANGE_OVERRIDE/DEV_FIRE_RATE_OVERRIDE (activas por
+			# default desde la verificación de los 4 tipos originales) hacen
+			# que cualquier torre alcance cualquier punto del nivel — útil
+			# para "¿dispara o no?" pero no para verificar que el rango/DPS
+			# real de cada fila de TOWER_TYPE_STATS alcanza el carril desde
+			# la zona construible. Ver docs/fase2-benchmark-conjunto.md.
+			TowerStore.DEV_RANGE_OVERRIDE = 0.0
+			TowerStore.DEV_FIRE_RATE_OVERRIDE = 0.0
 		if arg == "stress-test":
 			_stress_test = true
 		var parts := arg.split("=")
@@ -115,6 +133,12 @@ func _parse_cli_args() -> void:
 					_stress_towers = parts[1].to_int()
 				"stress-enemies":
 					_stress_enemies = parts[1].to_int()
+				"place-types":
+					# Subconjunto de _place_all_types_test() — para aislar un
+					# tipo (o familia, ej. "5,6" = BEAM) sin el resto
+					# compitiendo por los mismos enemigos, mismo criterio que
+					# el aislamiento por variable de fase2-benchmark-conjunto.md.
+					_place_types_test(parts[1])
 
 	if _stress_test:
 		_setup_stress_test()
@@ -138,12 +162,36 @@ func _setup_stress_test() -> void:
 	_stress_logger = BenchmarkLogger.new(out_path)
 	print("[level1] stress test: %d torres colocadas (objetivo %d), rampa a %d enemigos. Log: %s" % [placed, _stress_towers, _stress_enemies, out_path])
 
-## Prueba de verificación: una torre de cada uno de los 4 tipos, a lo largo
-## del carril, para que un solo run muestre los 4 comportamientos.
+## Prueba de verificación: una torre de cada uno de los 4 tipos originales,
+## a lo largo del carril, para que un solo run muestre los 4 comportamientos.
 func _place_test_towers() -> void:
 	var spots := [Vector2(60.0, -320.0), Vector2(60.0, -60.0), Vector2(60.0, 120.0), Vector2(60.0, 300.0)]
 	for t in 4:
 		_place_tower(spots[t], t)
+
+## Prueba de verificación de los 8 tipos reales de TOWER_TYPE_STATS,
+## incluidos los dos que `_place_test_towers()` no cubre (BEAM — láser y
+## lanzallamas migrados 08-ago — y riel), en la pantalla jugable real, no
+## en el arnés sintético de stress_main.gd. x=30 (borde izquierdo de
+## buildable_zones[0], a 60px del borde del carril) para que hasta
+## lanzallamas (el rango más corto, 90px) alcance con `real-stats` activo.
+func _place_all_types_test() -> void:
+	var types: Array = []
+	for t in TowerStore.TOWER_TYPE_STATS.size():
+		types.append(t)
+	_place_types(types)
+
+func _place_types_test(csv: String) -> void:
+	var types: Array = []
+	for s in csv.split(","):
+		types.append(s.to_int())
+	_place_types(types)
+
+func _place_types(types: Array) -> void:
+	var y_start := -320.0
+	var y_step := 640.0 / maxf(1.0, float(types.size() - 1))
+	for i in types.size():
+		_place_tower(Vector2(30.0, y_start + i * y_step), types[i])
 
 func _place_tower(pos: Vector2, tower_type: int = -1) -> bool:
 	if tower_type == -1:
@@ -185,6 +233,7 @@ func _process(delta: float) -> void:
 	_hash.build(_enemy_store)
 	_proj_system.tick(delta)
 	_tower_system.tick(delta)
+	_dot_system.tick(delta)
 
 	_enemy_render.sync(_enemy_store.positions, _enemy_store.active_count)
 	_proj_render.sync(_proj_store.positions, _proj_store.active_count, _proj_store.type_id)
@@ -197,7 +246,7 @@ func _process(delta: float) -> void:
 	if _quit_after > 0.0 and _elapsed >= _quit_after:
 		if _stress_logger:
 			_stress_logger.close()
-		print("[level1] listo — torres: %d, proyectiles activos: %d, enemigos activos: %d, leaks: %d" % [_tower_store.active_count, _proj_store.active_count, _enemy_store.active_count, _lane_system.leaked_count])
+		print("[level1] listo — torres: %d, proyectiles activos: %d, enemigos activos: %d, muertes: %d, leaks: %d" % [_tower_store.active_count, _proj_store.active_count, _enemy_store.active_count, _lane_system.killed_count, _lane_system.leaked_count])
 		get_tree().quit()
 
 ## Sostiene ~_stress_enemies activos (fuente estilo BenchmarkSpawner —

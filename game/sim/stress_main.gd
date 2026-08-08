@@ -14,11 +14,31 @@ extends Node2D
 ##                      (TowerSystem), enemigos fijos como blanco
 ##   mode=joint        "verificación de pico conjunto" (director, 08-ago):
 ##                      2.000 enemigos, 3.000 proyectiles (mezcla realista de
-##                      los 6 tipos), 20 torres reales — todo ×1.2 (condición
-##                      del 20% de T4) — TOWER_TYPE_STATS real (sin overrides
-##                      de desarrollo), backend nativo por default.
+##                      los 5 tipos viajeros — láser/lanzallamas no spawnean
+##                      proyectil, ver TOWER_MODE_BEAM), 20 torres reales —
+##                      todo ×1.2 (condición del 20% de T4) — TOWER_TYPE_STATS
+##                      real (sin overrides de desarrollo), backend nativo
+##                      por default.
+##   mode=vfx           benchmark de costo de VFX en GPU (docs/diseno-grafico.md
+##                      sección 5): mismo piso que mode=joint + una variable de
+##                      GPU por corrida, elegida con vfx-test=unit|scenario|
+##                      overdraw|tint (ver _setup_vfx()). CORRE EN VENTANA, NO
+##                      headless — --headless usa un driver de rendering sin
+##                      GPU real, un GPUParticles2D no hace nada ahí (se
+##                      confirmó: sin ventana no aparece la línea "Vulkan ...
+##                      Using Device" que sí aparece en corridas con ventana).
+##   mode=vfx-scale     escalada conservadora → real, con Vulkan real (pedido
+##                      explícito 08-ago, en vez de saltar directo al piso de
+##                      diseño): barre VFX_SCALE_ENEMY_LEVELS/TOWER_LEVELS
+##                      desde 50 enemigos/5 torres hasta 2.400/24, con
+##                      "torres normales" (tipos 0-3, no la familia BEAM/riel/
+##                      misil). vfx-scale-fx=1 agrega VFX proporcional al
+##                      tamaño de cada escalón (mismos emisores/capas que
+##                      mode=vfx) — sin el flag, mide población+render real
+##                      sola, para tener el punto de comparación limpio.
 ## Parámetros comunes: proj-type=mixed|0-5, tower-type=0-7, backend=gdscript|native,
-## level-duration=<seg>, hold-at-peak=<seg>
+## level-duration=<seg>, hold-at-peak=<seg>, vfx-test=unit|scenario|overdraw|tint,
+## vfx-count=<N> (solo vfx-test=overdraw), vfx-scale-fx=0|1 (solo mode=vfx-scale)
 
 const LEVEL_DEF := preload("res://data/level_01.tres")
 
@@ -58,7 +78,37 @@ const MAX_SPAWN_PER_FRAME := 300
 ## benchmark, no un costo real del juego. Diagnosticado 08-ago: aislada,
 ## zona sola corre a 7.5-13fps a esta escala; recto/homing solos, 75-80fps.
 const REALISTIC_PROJ_WEIGHTS := [32, 22, 14, 22, 10]  # suma 100, índice = proj_type (0-4, sin zona)
-const ZONE_FIXED_COUNT := 10  # cuántas zonas se sostienen en paralelo, fijo — no escala con proj_target
+
+## Migración de lanzallamas a TOWER_MODE_BEAM (fase2-benchmark-conjunto.md
+## sección 7, 08-ago): ninguna fila de TOWER_TYPE_STATS spawnea PROJ_ZONE ya
+## — la torre real que lo hacía ahora resuelve como rectángulo en
+## TowerSystem._tick_beam(), sin tocar ProjectileStore. Sostener zonas
+## sintéticas acá mediría un mecanismo que el juego real ya no tiene. En 0,
+## _top_up_zones() no hace nada — se deja la función en vez de borrarla por
+## si PROJ_ZONE vuelve a tener una fuente real (Racimo, categorías D/E/F).
+const ZONE_FIXED_COUNT := 0
+
+## Benchmark de VFX (docs/diseno-grafico.md sección 5) — parámetros de los
+## 4 escenarios. Ninguno tiene stats congeladas de catálogo todavía (Enjambre
+## y Gravedad son categorías C/D deferidas, fase2-benchmark-conjunto.md
+## sección 1), así que los conteos son suposiciones explícitas, no datos: ver
+## el comentario de cada escenario en _setup_vfx().
+const VFX_SWARM_AMOUNT := 40        # partículas por emisor, "a stats máximos"
+const VFX_SWARM_LIFETIME := 1.0
+const VFX_UNIT_EMITTER_COUNT := 3   # "conteo simultáneo realista" asumido — ~1 torre cada 8, como el resto del catálogo
+const VFX_SCENARIO_EMITTER_COUNT := 20  # de los 30 "torretas maxeadas" del escenario 2 — el resto son overdraw, ver abajo
+const VFX_SCENARIO_OVERDRAW_COUNT := 10
+const VFX_OVERDRAW_BASE := 10       # mismo tope que ZONE_FIXED_COUNT usaba — punto de partida, no arbitrario
+const VFX_OVERDRAW_STRESS := 25     # "una corrida adicional por encima del tope" pedida en la sección 5
+
+## mode=vfx-scale — escalones desde lo más conservador (5 torres normales,
+## 50 enemigos) hasta el piso de diseño ×1.2 (24 torres, 2.400 enemigos, el
+## mismo objetivo que JOINT_*_TARGET). Paralelos por índice: nivel i usa
+## VFX_SCALE_ENEMY_LEVELS[i] enemigos y VFX_SCALE_TOWER_LEVELS[i] torres.
+const VFX_SCALE_ENEMY_LEVELS := [50, 200, 500, 1000, 1600, 2400]
+const VFX_SCALE_TOWER_LEVELS := [5, 8, 12, 16, 20, 24]
+const VFX_SCALE_PROJ_RATIO := 1.5  # mismo ratio que JOINT_PROJ_TARGET/JOINT_ENEMY_TARGET (3000/2000)
+const VFX_SCALE_TOWER_TYPES := 4   # "torres normales" — cicla tipos 0-3 (recto/homing/perforante/splash), no BEAM/riel/misil
 
 var _mode := "enemies"
 var _proj_type_arg := "mixed"
@@ -106,7 +156,23 @@ var _joint_proj_target := 0
 var _joint_tower_target := 0
 var _joint_ramped := false
 
+var _vfx_test_arg := "unit"
+var _vfx_count_arg := -1  # -1 = usar VFX_OVERDRAW_BASE
+var _vfx_particle_tex: ImageTexture
+var _vfx_overdraw_tex: ImageTexture
+var _vfx_tint_material: ShaderMaterial
+
+var _vfx_scale_fx := false  # vfx-scale-fx=1
+var _vfx_scale_particles_added := 0
+var _vfx_scale_overdraw_added := 0
+
 func _ready() -> void:
+	# Sin esto, a poblacion baja (mode=vfx-scale, escalones iniciales) el
+	# frame time mide el refresco del monitor (144Hz acá), no el motor — un
+	# techo de vsync no es lo mismo que "el motor anda holgado". No aplica
+	# en --headless (no hay ventana que vsync-ear).
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	_parse_cli_args()
 	_level = LEVEL_DEF
 
@@ -116,10 +182,10 @@ func _ready() -> void:
 	_hash = SpatialHash.new(SPATIAL_CELL_SIZE)
 	_lane_system = LaneEnemySystem.new(_enemy_store, _level.waypoints, _level.obstacles, _level.obstacle_radius)
 	_proj_system = ProjectileSystem.new(_proj_store, _enemy_store, _hash)
-	_tower_system = TowerSystem.new(_tower_store, _enemy_store, _proj_store)
+	_tower_system = TowerSystem.new(_tower_store, _enemy_store, _proj_store, _hash)
 	_dot_system = DotSystem.new(_enemy_store)
 
-	if _mode == "joint" or _backend_arg == "native":
+	if _mode == "joint" or _mode == "vfx" or _mode == "vfx-scale" or _backend_arg == "native":
 		if ClassDB.class_exists("SimHotPath"):
 			_proj_system.native = ClassDB.instantiate("SimHotPath")
 			_backend_arg = "native"
@@ -154,18 +220,29 @@ func _ready() -> void:
 			_levels = TOWER_LEVELS
 		"joint":
 			_setup_joint()
+		"vfx":
+			_setup_joint()
+			_setup_vfx()
+		"vfx-scale":
+			_setup_vfx_scale()
 		_:
 			_mode = "enemies"
 			_levels = ENEMY_LEVELS
 
 	var total_time: float
-	if _mode == "joint":
+	if _mode == "joint" or _mode == "vfx":
 		total_time = 4.0 + _hold_at_peak  # la rampa a población fija tarda unos pocos segundos, no 30
 	else:
 		total_time = _level_duration * _levels.size() + _hold_at_peak
 	_shot_times = [total_time * 0.5, total_time * 0.95]
 
-	var tag := (_mode + "_sprite") if (_sprite_arg and _mode == "enemies") else _mode
+	var tag := _mode
+	if _mode == "vfx":
+		tag = _mode + "_" + _vfx_test_arg
+	elif _mode == "vfx-scale":
+		tag = _mode + ("_fx" if _vfx_scale_fx else "_base")
+	elif _sprite_arg and _mode == "enemies":
+		tag = _mode + "_sprite"
 	var out_path := "res://benchmark_results/stress_%s_%d.csv" % [tag, Time.get_unix_time_from_system()]
 	_logger = BenchmarkLogger.new(out_path)
 	print("[stress] modo=%s backend=%s sprite=%s niveles=%s tipo_proy=%s tipo_torre=%d log=%s" % [_mode, _backend_arg, _sprite_arg, str(_levels), _proj_type_arg, _tower_type_arg, out_path])
@@ -179,6 +256,165 @@ func _setup_joint() -> void:
 	_joint_proj_target = int(round(JOINT_PROJ_TARGET * JOINT_MARGIN))
 	_joint_tower_target = _joint_tower_override if _joint_tower_override >= 0 else int(round(JOINT_TOWER_TARGET * JOINT_MARGIN))
 	_levels = [_joint_proj_target]  # solo para que _current_target()/_at_final_level() no rompan
+
+## Benchmark de VFX en GPU (docs/diseno-grafico.md sección 5) — agrega UNA
+## variable de GPU sobre el piso de _setup_joint(), mismo método que ya
+## separó Ruta A/B y aisló PROJ_ZONE: una corrida, una variable.
+func _setup_vfx() -> void:
+	match _vfx_test_arg:
+		"unit":
+			# Escenario 1: costo unitario — un tipo de emisor (Gravedad:
+			# remolino de partículas siendo absorbidas — el caso "puro" de
+			# partículas del catálogo, a diferencia de Enjambre que es más
+			# proyectiles simulados que VFX) replicado al conteo simultáneo
+			# de ESE tipo de torreta. Sin fila congelada todavía para
+			# Gravedad, así que el conteo es una suposición explícita: ~3
+			# simultáneas, la misma densidad por tipo que ya usa el resto
+			# del catálogo en la composición de 24 torres/8 tipos del
+			# benchmark conjunto (fase2-benchmark-conjunto.md sección 3).
+			for i in VFX_UNIT_EMITTER_COUNT:
+				add_child(_make_swirl_emitter(_vfx_tower_slot(i, VFX_UNIT_EMITTER_COUNT)))
+		"scenario":
+			# Escenario 2: "30 torretas maxeadas disparando junto" (frase
+			# textual de docs-torretas-diseno.md) con VARIOS efectos VFX
+			# candidatos a la vez, no uno solo aislado — 20 emisores de
+			# partículas (Gravedad/Enjambre) + 10 capas de overdraw
+			# (Fuego/Veneno) simultáneas, sumando las 30.
+			for i in VFX_SCENARIO_EMITTER_COUNT:
+				add_child(_make_swirl_emitter(_vfx_tower_slot(i, VFX_SCENARIO_EMITTER_COUNT)))
+			var overdraw_pos := _vfx_tower_slot(0, 1)
+			for i in VFX_SCENARIO_OVERDRAW_COUNT:
+				add_child(_make_overdraw_layer(overdraw_pos))
+		"overdraw":
+			# Escenario 3: overdraw dirigido — N capas translúcidas
+			# superpuestas EN EL MISMO PUNTO (peor caso real, no disperso),
+			# arrancando en el mismo tope que ya usaba ZONE_FIXED_COUNT (10)
+			# y una corrida por encima (vfx-count=25) para saber cuánto
+			# margen hay antes de que duela, tal como pide la sección 5.
+			var n := _vfx_count_arg if _vfx_count_arg > 0 else VFX_OVERDRAW_BASE
+			var pos := _vfx_tower_slot(0, 1)
+			for i in n:
+				add_child(_make_overdraw_layer(pos))
+		"tint":
+			# Escenario 4: corrida chica de control — Torreta del Caos,
+			# un solo shader de tinte sobre una malla, para confirmar que
+			# es barato y no necesita la misma cautela que 1-3.
+			add_child(_make_tint_quad(_vfx_tower_slot(0, 1)))
+
+## mode=vfx-scale — mismas stats reales que _setup_joint(), pero sin fijar
+## un único objetivo: _levels queda en VFX_SCALE_ENEMY_LEVELS para que el
+## barrido genérico de _process() (el mismo que ya usan mode=enemies/
+## towers/projectiles) avance de escalón en escalón por level-duration.
+func _setup_vfx_scale() -> void:
+	TowerStore.DEV_RANGE_OVERRIDE = 0.0
+	TowerStore.DEV_FIRE_RATE_OVERRIDE = 0.0
+	_levels = VFX_SCALE_ENEMY_LEVELS
+
+## "Torres normales" (tipos 0-3) — mismo top-up incremental que _ensure_towers(),
+## pero sin ciclar por los 8 tipos: mode=vfx-scale empieza conservador a
+## propósito, sin la familia BEAM/riel/misil todavía.
+func _ensure_towers_normales(target: int) -> void:
+	var spawned := 0
+	while _tower_store.active_count < target and spawned < MAX_SPAWN_PER_FRAME:
+		var idx := _tower_store.active_count
+		var col := idx % 40
+		var row := idx / 40
+		var pos := Vector2(-620.0 + col * 26.0, -350.0 + row * 26.0)
+		if _tower_store.spawn_typed(pos, idx % VFX_SCALE_TOWER_TYPES) == -1:
+			break
+		spawned += 1
+
+## Agrega VFX proporcional al tamaño del escalón actual (solo si
+## vfx-scale-fx=1) — mismos emisores/capas que _setup_vfx(), mismo ratio
+## 20/24 partículas y 10/24 overdraw que ya midió mode=vfx=scenario, ahora
+## repartido a lo largo de la rampa en vez de todo de una. Solo agrega la
+## diferencia contra lo ya puesto — la población de VFX nunca baja, igual
+## que enemigos/proyectiles/torres en este barrido.
+func _sync_vfx_scale_fx(towers: int) -> void:
+	if not _vfx_scale_fx:
+		return
+	var target_particles := int(round(towers * float(VFX_SCENARIO_EMITTER_COUNT) / float(JOINT_TOWER_TARGET * JOINT_MARGIN)))
+	var target_overdraw := int(round(towers * float(VFX_SCENARIO_OVERDRAW_COUNT) / float(JOINT_TOWER_TARGET * JOINT_MARGIN)))
+	var overdraw_pos := _vfx_tower_slot(0, 1)
+	while _vfx_scale_particles_added < target_particles:
+		add_child(_make_swirl_emitter(_vfx_tower_slot(_vfx_scale_particles_added, target_particles)))
+		_vfx_scale_particles_added += 1
+	while _vfx_scale_overdraw_added < target_overdraw:
+		add_child(_make_overdraw_layer(overdraw_pos))
+		_vfx_scale_overdraw_added += 1
+
+## Reparte N puntos a lo largo de la fila de torres del benchmark conjunto
+## (mismo layout que _ensure_towers()) — para que los emisores de VFX estén
+## donde estarían las torres reales, no amontonados en un solo punto salvo
+## que el escenario lo pida a propósito (overdraw).
+func _vfx_tower_slot(i: int, total: int) -> Vector2:
+	var col := i % 40
+	var row := i / 40
+	return Vector2(-620.0 + col * 26.0, -260.0 - row * 26.0)
+
+func _get_particle_tex() -> ImageTexture:
+	if _vfx_particle_tex == null:
+		var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+		img.fill(Color(1.0, 1.0, 1.0, 1.0))
+		_vfx_particle_tex = ImageTexture.create_from_image(img)
+	return _vfx_particle_tex
+
+func _get_overdraw_tex() -> ImageTexture:
+	if _vfx_overdraw_tex == null:
+		var img := Image.create(120, 120, false, Image.FORMAT_RGBA8)
+		img.fill(Color(1.0, 1.0, 1.0, 1.0))
+		_vfx_overdraw_tex = ImageTexture.create_from_image(img)
+	return _vfx_overdraw_tex
+
+## "Remolino de partículas siendo absorbidas" (Gravedad, #15) — órbita
+## alrededor del punto de emisión en vez de dispersión radial simple, para
+## que el patrón de movimiento sea el que de verdad estresa el compute de
+## partículas (no solo el conteo/overdraw, que ya mide el escenario 3).
+func _make_swirl_emitter(pos: Vector2) -> GPUParticles2D:
+	var p := GPUParticles2D.new()
+	var mat := ParticleProcessMaterial.new()
+	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	mat.emission_sphere_radius = 36.0
+	mat.spread = 180.0
+	mat.gravity = Vector3.ZERO
+	mat.initial_velocity_min = 20.0
+	mat.initial_velocity_max = 50.0
+	mat.orbit_velocity_min = 0.6
+	mat.orbit_velocity_max = 1.4
+	mat.scale_min = 0.6
+	mat.scale_max = 1.2
+	mat.color = Color(0.65, 0.35, 0.85, 0.85)
+	p.process_material = mat
+	p.texture = _get_particle_tex()
+	p.amount = VFX_SWARM_AMOUNT
+	p.lifetime = VFX_SWARM_LIFETIME
+	p.position = pos
+	p.emitting = true
+	return p
+
+## Capa translúcida superpuesta (Fuego/Veneno, #11/#13 — "humo negro
+## acumulado" / "nube tóxica") — un Sprite2D semitransparente es el caso de
+## overdraw puro: cada capa extra es un blend adicional por píxel cubierto,
+## sin partículas de por medio (eso ya lo mide "unit"/"scenario").
+func _make_overdraw_layer(pos: Vector2) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = _get_overdraw_tex()
+	s.position = pos
+	s.modulate = Color(1.0, 0.35, 0.05, 0.35)
+	return s
+
+## Torreta del Caos (#20) — un shader de modulación de color sobre una sola
+## malla, en vez de 19 variantes de sprite pre-coloreadas. _vfx_tint_material
+## queda guardado para que _process() anime hue_shift — "recicla el color...
+## en cada disparo" es continuo, no un solo frame.
+func _make_tint_quad(pos: Vector2) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = _get_overdraw_tex()
+	s.position = pos
+	_vfx_tint_material = ShaderMaterial.new()
+	_vfx_tint_material.shader = load("res://render/chaos_tint.gdshader")
+	s.material = _vfx_tint_material
+	return s
 
 func _parse_cli_args() -> void:
 	for arg in OS.get_cmdline_user_args():
@@ -206,6 +442,12 @@ func _parse_cli_args() -> void:
 				_joint_enemy_override = parts[1].to_int()
 			"joint-towers":
 				_joint_tower_override = parts[1].to_int()
+			"vfx-test":
+				_vfx_test_arg = parts[1]
+			"vfx-count":
+				_vfx_count_arg = parts[1].to_int()
+			"vfx-scale-fx":
+				_vfx_scale_fx = parts[1] == "1"
 
 func _current_target() -> int:
 	return _levels[_level_idx]
@@ -300,11 +542,13 @@ func _process(delta: float) -> void:
 		return
 	_elapsed += delta
 
-	if _mode == "joint":
+	if _mode == "joint" or _mode == "vfx":
 		_top_up_enemies(_joint_enemy_target, FIXED_ENEMY_HEALTH)
 		_top_up_projectiles(_joint_proj_target)
 		_top_up_zones()
 		_ensure_towers(_joint_tower_target, true)
+		if _vfx_tint_material:
+			_vfx_tint_material.set_shader_parameter("hue_shift", fmod(_elapsed * 0.3, 1.0))
 	else:
 		_level_timer += delta
 		if _level_timer >= _level_duration and not _at_final_level():
@@ -320,6 +564,12 @@ func _process(delta: float) -> void:
 			"towers":
 				_top_up_enemies(FIXED_ENEMY_POP, FIXED_ENEMY_HEALTH)
 				_ensure_towers(_current_target())
+			"vfx-scale":
+				var scale_towers: int = VFX_SCALE_TOWER_LEVELS[_level_idx]
+				_top_up_enemies(_current_target(), FIXED_ENEMY_HEALTH)
+				_top_up_projectiles(int(round(_current_target() * VFX_SCALE_PROJ_RATIO)))
+				_ensure_towers_normales(scale_towers)
+				_sync_vfx_scale_fx(scale_towers)
 
 	_lane_system.tick(delta)
 	_hash.build(_enemy_store)
@@ -327,7 +577,7 @@ func _process(delta: float) -> void:
 		_proj_system.tick_native(delta)
 	else:
 		_proj_system.tick(delta)
-	if _mode == "towers" or _mode == "joint":
+	if _mode == "towers" or _mode == "joint" or _mode == "vfx" or _mode == "vfx-scale":
 		_tower_system.tick(delta)
 	_dot_system.tick(delta)
 
@@ -340,7 +590,7 @@ func _process(delta: float) -> void:
 	_logger.tick(delta, _proj_store.active_count, _enemy_store.active_count)
 	_maybe_screenshot()
 
-	if _mode == "joint":
+	if _mode == "joint" or _mode == "vfx":
 		if not _joint_ramped:
 			if _enemy_store.active_count >= int(_joint_enemy_target * 0.95) and _proj_store.active_count >= int(_joint_proj_target * 0.9) and _tower_store.active_count >= _joint_tower_target:
 				_joint_ramped = true
@@ -362,15 +612,20 @@ func _maybe_screenshot() -> void:
 		if _elapsed >= t and not _shots_taken.has(t):
 			_shots_taken[t] = true
 			var img := get_viewport().get_texture().get_image()
-			var path := "res://benchmark_results/stress_%s_t%d.png" % [_mode, int(t)]
+			var shot_tag := _mode
+			if _mode == "vfx":
+				shot_tag = _mode + "_" + _vfx_test_arg
+			elif _mode == "vfx-scale":
+				shot_tag = _mode + ("_fx" if _vfx_scale_fx else "_base")
+			var path := "res://benchmark_results/stress_%s_t%d.png" % [shot_tag, int(t)]
 			img.save_png(path)
 			print("[stress] screenshot: ", path)
 
 func _finish() -> void:
 	_quitting = true
 	_logger.close()
-	var final_target = _joint_proj_target if _mode == "joint" else _levels[_level_idx]
-	print("[stress] listo — modo=%s backend=%s nivel_final=%d proy=%d enem=%d torres=%d" % [_mode, _backend_arg, final_target, _proj_store.active_count, _enemy_store.active_count, _tower_store.active_count])
+	var final_target = _joint_proj_target if (_mode == "joint" or _mode == "vfx") else _levels[_level_idx]
+	print("[stress] listo — modo=%s vfx-test=%s backend=%s nivel_final=%d proy=%d enem=%d torres=%d" % [_mode, _vfx_test_arg, _backend_arg, final_target, _proj_store.active_count, _enemy_store.active_count, _tower_store.active_count])
 	get_tree().quit()
 
 func _draw() -> void:

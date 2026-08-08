@@ -264,14 +264,16 @@ estricta.
 Para poder generar los prompts finales de ChatGPT en la siguiente pasada, necesito de
 vuelta:
 
-1. **Greenlight (o ajuste) del benchmark de la sección 5** — y quién lo corre; todos los
-   benchmarks anteriores de este proyecto los construyó y corrió quien está en el rol
-   de motor/director, no gráficos.
+1. ~~Greenlight (o ajuste) del benchmark de la sección 5~~ — **hecho, 08-ago**:
+   `docs/fase2-vfx-benchmark.md`. Costo fijo real (~7-10fps de promedio, ~11-15fps de
+   piso) por tener VFX presente, pero **no escala con cuánto se agrega** — 3 emisores
+   cuestan lo mismo que 20+10, y overdraw ×10 lo mismo que ×25. No es el riesgo que
+   había que temer, con datos en vez de argumento.
 2. **Con el resultado en mano, la elección de técnica de ilustración** entre las tres
    candidatas (vectorial plano de bordes marcados, pintado semi-realista evolucionando
-   `characters.png`, o pixel art retro) — quedan las tres abiertas hasta entonces; en
-   la sección 0 de este documento están las razones por las que no elijo una sin el
-   dato.
+   `characters.png`, o pixel art retro) — el benchmark ya no las bloquea, siguen las
+   tres abiertas como decisión de diseño; en la sección 0 de este documento están las
+   razones por las que no elijo una sin el dato.
 3. **Confirmación de que la tarjeta de motor de la sección 1** (enrutar `sync()` por
    `type_id` a un store por tipo) y **la de la sección 2** (campo de fondo/tema en
    `LevelDef`) entran al tablero como trabajo de motor pendiente, no de gráficos —
@@ -351,3 +353,51 @@ pero Mortero/Misil y Fuego/Lanzallamas todavía no está dicho si son el mismo
 concepto renombrado o si son cuatro entradas distintas — no lo resuelvo yo
 acá, es una decisión de diseño, no de arte ni de motor. La dejo marcada para
 que no se descubra recién al escribir el prompt de la fila 5, 6 o 9.
+
+---
+
+## 9. Técnica de ilustración — decidida (director, 08-ago, post-VFX)
+
+El benchmark de la sección 5 salió — `docs/fase2-vfx-benchmark.md`: costo
+fijo por tener VFX presente, no escala con cuánto se agrega, piso de motor
+absorbe ese costo con margen en el rango probado. Ya no bloquea nada. Con
+eso resuelto, esto es lo último que faltaba para que Arte escriba los 20+
+prompts finales.
+
+**Descarto pintado semi-realista** (evolucionar `characters.png`) — no por
+gusto, por un número que ya está en el código: los quads de render en este
+proyecto miden entre 14 y 26px (`level_controller.gd`, `stress_main.gd`,
+`typed_render_group.gd`). El detalle pintado de `characters.png` está
+pensado para leerse mucho más grande que eso — a 14-26px, un torso con
+sombreado y textura de tela se va a leer como una mancha de color, no como
+una silueta reconocible. Esto empeora, no mejora, con el problema que la
+propia sección 1 ya identificó: 20 colores de firma que tienen que
+distinguirse a simple vista y en simultáneo. Pintado detallado compite
+contra su propia legibilidad a este tamaño; no es un problema de VFX ni de
+GPU, es geometría de píxeles en pantalla.
+
+**Elijo vectorial plano de bordes marcados** sobre pixel art retro — los
+dos leen bien a 14-26px, la diferencia está en el pipeline de producción
+que ya está en marcha. El catálogo de 20 torretas (`docs-torretas-diseno.md`)
+ya está descripto enteramente en el vocabulario de "color de firma plano +
+silueta clara" — vectorial plano es ejecutar ese vocabulario tal cual, sin
+traducirlo. Pixel art pide además sostener una grilla de píxel consistente
+entre 20+ generaciones independientes por prompt de ChatGPT — un eje de
+consistencia adicional que el pipeline actual (un prompt por torreta/
+enemigo, no un spritesheet armado a mano) no está pensado para verificar.
+No es que pixel art no funcione — es que vectorial plano tiene un riesgo de
+producción menos para este pipeline específico.
+
+**Esto es una llamada técnica de legibilidad + ajuste de pipeline, no un
+veto de gusto.** Si Arte tiene una razón de diseño fuerte para pixel art
+que yo no esté viendo, listo para escucharla — pero no la bloqueo más
+tiempo esperando esa conversación si no hay una objeción concreta ya
+planteada.
+
+**Con esto, Arte tiene luz verde para escribir los 20+ prompts finales y
+producir textura real** — paleta, colores de firma, composición, temática
+espacial y ahora técnica de ilustración están cerrados. El pendiente de
+nomenclatura (Mortero/Misil y Fuego/Lanzallamas, ya reconciliados en
+`docs-torretas-diseno.md`/`tower_store.gd`; si láser tiene entrada propia o
+la absorbe Riel, todavía abierto) no bloquea empezar — se resuelve por
+torreta a medida que se prompta, no antes.

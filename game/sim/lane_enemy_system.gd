@@ -18,6 +18,7 @@ var obstacles: PackedVector2Array
 var obstacle_radius: float
 
 var leaked_count: int = 0
+var killed_count: int = 0  # health<=0 antes de llegar a la meta — evidencia de que algo le hizo daño
 
 func _init(p_store: EnemyStore, p_waypoints: PackedVector2Array, p_obstacles: PackedVector2Array, p_obstacle_radius: float) -> void:
 	store = p_store
@@ -30,6 +31,7 @@ func tick(delta: float) -> void:
 	while i < store.active_count:
 		if store.health[i] <= 0.0:
 			store.release(i)
+			killed_count += 1
 			continue
 
 		var wp_idx := store.waypoint_index[i]

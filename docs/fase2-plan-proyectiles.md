@@ -206,14 +206,18 @@ que apareció en el camino: `docs/fase2-benchmark-conjunto.md`.
 
 **Resumen de una línea:** el benchmark de pico conjunto (2.000 enemigos,
 3.000 proyectiles, 20 torres — todo ×1.2 por la condición del 20% de T4)
-**ronda justo la línea de 60fps (58-65fps)** con el hot path de Rust
-extendido — no es una aprobación cómoda, es un empate técnico. En el
-camino se encontró y corrigió un problema real de metodología del
-benchmark (PROJ_ZONE inyectado como si fuera un proyectil más de volumen,
-cuando en juego real nunca hay más que un puñado activas) — sin esa
-corrección, el número reportado hubiera sido un falso negativo severo
-(7.5-13fps). Detalle completo, cifras por eje y qué hacer con esto en el
-documento dedicado.
+**pasa la regla del 20% con margen real** (sostenido por encima de 60fps,
+sin valles) con el hot path de Rust extendido, tras dos rondas de
+corrección: un problema de metodología del benchmark (PROJ_ZONE inyectado
+como si fuera un proyectil más de volumen — falso negativo severo,
+7.5-13fps), un bug real de datos (`fire_rate: 0.0` en la fila de
+lanzallamas causaba recarga instantánea, no artefacto del benchmark), y
+finalmente la migración de lanzallamas a `TOWER_MODE_BEAM` (sección 5 de
+este documento) que sacó el mecanismo entero de `ProjectileStore` en vez de
+optimizarlo. El 58-65fps que rondó la línea en el camino no era el número
+final — quedó documentado igual, por transparencia del proceso. Detalle
+completo, cifras por eje y las tres rondas en
+`docs/fase2-benchmark-conjunto.md`.
 
 ---
 

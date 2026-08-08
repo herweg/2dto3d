@@ -37,6 +37,23 @@ func query_nearby(pos: Vector2) -> PackedInt32Array:
 				result.append_array(_cells[k])
 	return result
 
+## Igual que query_nearby() pero para radios mayores a una celda (torres de
+## área — fase2-benchmark-conjunto.md sección 7: el chequeo de rectángulo
+## de _tick_beam() tiene que acotarse por hash, no barrer active_count
+## completo). Devuelve candidatos de un cuadrado de lado 2*radius, sin
+## filtrar por distancia real — eso queda a cargo de quien llama, esto solo
+## acota cuántos candidatos hay que revisar.
+func query_radius(pos: Vector2, radius: float) -> PackedInt32Array:
+	var result := PackedInt32Array()
+	var base := _key(pos)
+	var span := ceili(radius / cell_size)
+	for dx in range(-span, span + 1):
+		for dy in range(-span, span + 1):
+			var k := Vector2i(base.x + dx, base.y + dy)
+			if _cells.has(k):
+				result.append_array(_cells[k])
+	return result
+
 func key_for(pos: Vector2) -> Vector2i:
 	return _key(pos)
 

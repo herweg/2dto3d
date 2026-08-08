@@ -3,35 +3,47 @@ extends RefCounted
 
 ## Targeting + disparo de torres (Fase 2, pantalla 1 + fase2-plan-proyectiles.md).
 ## Reutiliza ProjectileStore.spawn() tal como lo dejó el spike de Sprint 2 —
-## no hace falta el hash espacial ni el hot path de Rust a la escala de una
-## pantalla jugable, así que la búsqueda de objetivo es brute-force sobre
-## enemy_store.positions. Láser y riel (TOWER_MODE_BEAM/RAIL) no pasan por
-## acá — no spawnean proyectil, ver _tick_laser()/_tick_rail().
+## los tipos que spawnean proyectil siguen con búsqueda brute-force sobre
+## enemy_store.positions (pocas torres, dispara poco seguido, no hace falta
+## más). La familia BEAM (láser + lanzallamas, TOWER_MODE_BEAM) sí filtra por
+## SpatialHash — corre cada tick sin cooldown de disparo, así que a escala de
+## benchmark conjunto (2.400 enemigos) el brute-force sí importaba: ver
+## fase2-benchmark-conjunto.md sección 7. Riel (TOWER_MODE_RAIL) tampoco
+## spawnea proyectil pero sigue en brute-force — dispara cada RAIL_CHARGE,
+## no cada tick.
 
 const PROJ_SPEED := 520.0
 const PROJ_LIFE := 1.5
-const ZONE_LIFE := 3.0    # cuánto dura plantada una zona de lanzallamas
 const MISSILE_SPEED := 260.0  # para derivar el tiempo de vuelo según distancia
 
-const LASER_GRACE := 0.4  # dot_time_left que refresca cada tick de contacto — fase2-plan-proyectiles.md 1.2
 const RAIL_CHARGE := 1.2
 const RAIL_HIT_WIDTH := 14.0
+
+## Cadencia de reselección de objetivo/candidatos para la familia BEAM
+## (fase2-benchmark-conjunto.md sección 7, pedido del director 08-ago): el
+## rectángulo se re-evalúa 8 veces/seg, no las 60 del tick — el DoT que deja
+## (dot_linger) ya tiene margen de sobra para que se sienta continuo entre
+## una reselección y la siguiente. Reusa cooldown_left como timer, igual que
+## el resto de las torres (para BEAM antes no se usaba para nada).
+const BEAM_RETARGET_INTERVAL := 1.0 / 8.0
 
 var tower_store: TowerStore
 var enemy_store: EnemyStore
 var proj_store: ProjectileStore
+var hash: SpatialHash
 
-func _init(p_tower: TowerStore, p_enemy: EnemyStore, p_proj: ProjectileStore) -> void:
+func _init(p_tower: TowerStore, p_enemy: EnemyStore, p_proj: ProjectileStore, p_hash: SpatialHash) -> void:
 	tower_store = p_tower
 	enemy_store = p_enemy
 	proj_store = p_proj
+	hash = p_hash
 
 func tick(delta: float) -> void:
 	for i in tower_store.active_count:
 		var proj_type := tower_store.proj_type_of(i)
 
 		if proj_type == TowerStore.TOWER_MODE_BEAM:
-			_tick_laser(i)
+			_tick_beam(i, delta)
 			continue
 		if proj_type == TowerStore.TOWER_MODE_RAIL:
 			_tick_rail(i, delta)
@@ -56,11 +68,6 @@ func _fire(i: int, proj_type: int, target: int) -> void:
 		_fire_missile(i, origin, target_pos)
 		return
 
-	if proj_type == ProjectileSystem.PROJ_ZONE:
-		# Se planta en el punto del enemigo objetivo, no en la torre.
-		proj_store.spawn(target_pos, Vector2.ZERO, ZONE_LIFE, tower_store.damage[i], proj_type, 1, -1, tower_store.proj_extra[i])
-		return
-
 	var dir := (target_pos - origin).normalized()
 	# hits/objetivo/radio de splash dependen del tipo — el resto los ignora
 	# (defaults seguros de ProjectileStore.spawn()).
@@ -79,17 +86,61 @@ func _fire_missile(i: int, origin: Vector2, target_pos: Vector2) -> void:
 	if idx != -1:
 		proj_store.set_trajectory(idx, origin, target_pos, duration)
 
-## Láser (fase2-plan-proyectiles.md 1.2): sin cooldown real — cada tick que
-## hay un enemigo en rango, refresca su DoT (mismo slot que lanzallamas,
-## dot_system.gd lo consume). Sin contacto, el timer decae solo — es el
-## margen corto "sigo recibiendo daño un rato" del catálogo, gratis por
-## construcción del esquema de DoT, no lógica nueva.
-func _tick_laser(i: int) -> void:
-	var target := _find_nearest_enemy(tower_store.positions[i], tower_store.range[i])
+## Familia BEAM (láser + lanzallamas desde la migración de fase2-benchmark-
+## conjunto.md sección 7): rectángulo de largo `range` y ancho `proj_extra`
+## que parte de la torre hacia el candidato más cercano — refresca el DoT
+## (dot_dps/dot_time_left, mismo slot que consume dot_system.gd) de todo
+## enemigo dentro del rectángulo, no solo el que fija la dirección. Reusa
+## exactamente la geometría de corredor de _tick_rail() (dot-product +
+## distancia perpendicular), la diferencia es DoT continuo vs hit único y
+## que los candidatos salen de SpatialHash.query_radius() en vez de barrer
+## enemy_store.active_count completo — a 2.400 enemigos ese barrido es lo
+## que causaba la caída diagnosticada en esa misma sección.
+func _tick_beam(i: int, delta: float) -> void:
+	tower_store.cooldown_left[i] -= delta
+	if tower_store.cooldown_left[i] > 0.0:
+		return
+	tower_store.cooldown_left[i] = BEAM_RETARGET_INTERVAL
+
+	var origin := tower_store.positions[i]
+	var length := tower_store.range[i]
+	var half_width := tower_store.proj_extra[i] * 0.5
+	var candidates := hash.query_radius(origin, length + half_width)
+	if candidates.is_empty():
+		return
+
+	var target := _nearest_in(origin, length, candidates)
 	if target == -1:
 		return
-	enemy_store.dot_dps[target] = tower_store.damage[i]
-	enemy_store.dot_time_left[target] = LASER_GRACE
+	var dir := (enemy_store.positions[target] - origin).normalized()
+
+	var dps := tower_store.damage[i]
+	var linger := tower_store.dot_linger[i]
+	var half_width_sq := half_width * half_width
+	for e in candidates:
+		var to_e := enemy_store.positions[e] - origin
+		var along := to_e.dot(dir)
+		if along < 0.0 or along > length:
+			continue
+		var perp := to_e - dir * along
+		if perp.length_squared() <= half_width_sq:
+			enemy_store.dot_dps[e] = dps
+			enemy_store.dot_time_left[e] = linger
+
+## Más cercano dentro de `range_limit`, restringido a `candidates` (ya
+## acotados por hash) en vez de enemy_store.active_count — mismo contrato
+## que _find_nearest_enemy() de abajo, que sigue usando barrido completo
+## porque riel dispara cada RAIL_CHARGE=1.2s, no cada tick (no vale la pena
+## acotarlo todavía, ver fase2-benchmark-conjunto.md sección 7).
+func _nearest_in(origin: Vector2, range_limit: float, candidates: PackedInt32Array) -> int:
+	var best := -1
+	var best_dist_sq := range_limit * range_limit
+	for e in candidates:
+		var dist_sq := enemy_store.positions[e].distance_squared_to(origin)
+		if dist_sq <= best_dist_sq:
+			best_dist_sq = dist_sq
+			best = e
+	return best
 
 ## Riel (fase2-plan-proyectiles.md 3, "misma familia que láser"): carga
 ## RAIL_CHARGE segundos (reusa cooldown_left como timer de carga) y then

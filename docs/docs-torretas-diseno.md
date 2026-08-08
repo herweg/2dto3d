@@ -253,3 +253,16 @@ Cada torreta tiene 3 "capas" de lectura visual según su nivel de stats:
 > enemigo está en el haz). Vale confirmar si el láser sigue en pie como
 > torreta aparte, si Riel lo reemplaza, o si quedó afuera de este primer
 > approach a propósito — no lo asumo en ninguna dirección.
+>
+> **Reconciliación de nombres, 08-ago (`fase2-benchmark-conjunto.md` sección
+> 7).** Por correspondencia mecánica, no por suposición: **Mortero** (#9,
+> arco parabólico + delay de vuelo + fragmentos secundarios) es lo que el
+> motor viene llamando "misil" desde `fase2-plan-proyectiles.md` — mismo
+> disparo (trayectoria precalculada al lanzar, splash al llegar), nombre
+> distinto en cada documento. **Fuego** (#11, DoT de área que queda en el
+> suelo) es lo que el motor llama "lanzallamas" — mismo mecanismo. Riel (#3)
+> sigue confirmado distinto de láser, sin cambios ahí. **Lo que sigue sin
+> resolver, porque es diseño y no nomenclatura:** si láser (DPS continuo,
+> ya migrado a `TOWER_MODE_BEAM` junto con Fuego/lanzallamas) es una entrada
+> nueva de este catálogo de 20, o si Riel lo reemplaza, o si queda afuera a
+> propósito — la pregunta original de este párrafo sigue en pie tal cual.

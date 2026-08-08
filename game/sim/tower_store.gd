@@ -19,73 +19,46 @@ var dot_linger: PackedFloat32Array
 
 ## type_id → {range, fire_rate, damage, proj_type, proj_extra}. proj_type
 ## usa las constantes PROJ_* de projectile_system.gd (0=recto, 1=homing,
-## 2=perforante, 3=splash, 4=misil, 5=zona) más dos modos que no spawnean
-## proyectil (6=láser, 7=riel — TOWER_MODE_* abajo) — acá van como
-## literales para no crear una dependencia circular entre los dos scripts.
-## Congelamiento de 7 tipos (fase2-plan-proyectiles.md, sección 3, decisión
-## de alcance del director 08-ago) — Racimo y las categorías D/E/F de
-## docs-torretas-diseno.md quedan deferidas a propósito.
-const TOWER_MODE_BEAM := 6  # láser: DPS continuo mientras hay contacto, sin ProjectileStore
+## 2=perforante, 3=splash, 4=misil) más dos modos que no spawnean proyectil
+## (6=BEAM — láser y lanzallamas, 7=riel — TOWER_MODE_* abajo) — acá van
+## como literales para no crear una dependencia circular entre los dos
+## scripts. Congelamiento de 7 tipos (fase2-plan-proyectiles.md, sección 3,
+## decisión de alcance del director 08-ago) — Racimo y las categorías D/E/F
+## de docs-torretas-diseno.md quedan deferidas a propósito. Nomenclatura de
+## catálogo (docs-torretas-diseno.md): misil = "Mortero" (#9, arco + delay +
+## splash al impacto), lanzallamas = "Fuego" (#11, DoT de área en el suelo)
+## — mismo mecanismo bajo nombres distintos en cada documento, reconciliado
+## 08-ago. Riel (#3) y láser quedan sin resolver si el segundo tiene entrada
+## propia en el catálogo de 20 — esa parte es decisión de diseño, no de
+## nomenclatura, y sigue abierta.
+const TOWER_MODE_BEAM := 6  # láser + lanzallamas: rectángulo de DoT continuo, sin ProjectileStore
 const TOWER_MODE_RAIL := 7  # riel: carga + hitscan instantáneo en línea, sin ProjectileStore
 
-## Familia BEAM (PM, 08-ago — cristaliza la tarjeta "confirmar arquitectura
-## del láser"): tanto láser como lanzallamas son un rectángulo de área
-## efectiva que parte de la torreta — no un punto ni un círculo. Mismos 4
-## parámetros para los dos, solo cambian los valores:
-##   - `range`   → largo del rectángulo (ya existía, se reusa tal cual).
-##   - `proj_extra` → ancho del rectángulo, repurpuesto para filas BEAM
-##     (hoy sin uso en la fila de láser — antes era 0.0 porque no aplicaba).
-##     Angosto y largo en láser; ancho y corto en lanzallamas.
-##   - `damage`  → DPS por tick (no daño directo), como ya hacía láser.
-##   - `dot_linger` (NUEVO, 1 campo) → cuánto `dot_time_left` se refresca
-##     cada tick de contacto. Antes era `LASER_GRACE` (0.4, hardcodeado y
-##     compartido) en tower_system.gd — ahora es dato por fila, así
+## Familia BEAM (migrada por completo 08-ago, fase2-benchmark-conjunto.md
+## sección 7): láser y lanzallamas son un rectángulo de área efectiva que
+## parte de la torre — no un punto ni un círculo. Mismos 4 parámetros para
+## los dos, solo cambian los valores:
+##   - `range`      → largo del rectángulo.
+##   - `proj_extra` → ancho del rectángulo. Angosto y largo en láser; ancho
+##     y corto en lanzallamas.
+##   - `damage`     → DPS por tick (no daño directo).
+##   - `dot_linger` → cuánto se refresca `dot_time_left` en cada
+##     reselección de `_tick_beam()` (tower_system.gd) — dato por fila, así
 ##     lanzallamas puede tener una duración mayor sin tocar código.
-## Geometría de referencia ya escrita y probada: `_tick_rail()` en
-## tower_system.gd hace exactamente este chequeo de corredor
-## (`along = to_e.dot(dir)`, `perp.length_squared() <= hit_width_sq`) para
-## riel — es la base a reusar/generalizar para láser y lanzallamas, no una
-## consulta nueva desde cero.
-##
-## Estado de implementación (no confundir "dato cargado" con "mecánica
-## viva"): la fila 6 (láser) ya usa `TOWER_MODE_BEAM` y corre, pero
-## `_tick_laser()` hoy sigue siendo círculo + un solo objetivo (el más
-## cercano) — todavía no lee `proj_extra`/`dot_linger` como rectángulo. La
-## fila 5 (lanzallamas) queda **a propósito** con `proj_type: 5` (PROJ_ZONE)
-## sin tocar por ahora — los valores de abajo son el diseño objetivo, listos
-## para cuando alguien generalice `_tick_laser()` a un `_tick_beam()`
-## compartido que sí resuelva el rectángulo para las dos filas. Migrar la
-## fila 5 a `TOWER_MODE_BEAM` *antes* de que exista esa lógica generalizada
-## haría que lanzallamas se comporte como un láser angosto de un solo
-## blanco — silenciosamente mal, no un crash. Ver `fase2-plan-proyectiles.md`
-## para el detalle completo, incluida la ganancia de rendimiento esperada
-## (deja de consumir `ProjectileStore`/`hash.query_nearby()` por tick, que
-## es la causa exacta que encontró `fase2-benchmark-conjunto.md`).
+## Ninguna de las dos filas pasa por `ProjectileStore` — `_tick_beam()`
+## filtra candidatos por `SpatialHash.query_radius()` y aplica el mismo
+## chequeo de corredor que ya usaba `_tick_rail()` (dot-product + distancia
+## perpendicular), reevaluado a 8Hz en vez de cada tick.
 const TOWER_TYPE_STATS := {
 	0: {"range": 220.0, "fire_rate": 0.6, "damage": 6.0, "proj_type": 0, "proj_extra": 0.0},   # recta
 	1: {"range": 260.0, "fire_rate": 1.1, "damage": 5.0, "proj_type": 1, "proj_extra": 0.0},   # homing
 	2: {"range": 190.0, "fire_rate": 0.9, "damage": 4.0, "proj_type": 2, "proj_extra": 3.0},   # perforante (3 impactos)
 	3: {"range": 170.0, "fire_rate": 1.4, "damage": 7.0, "proj_type": 3, "proj_extra": 42.0},  # splash (radio 42px)
-	4: {"range": 240.0, "fire_rate": 1.6, "damage": 9.0, "proj_type": 4, "proj_extra": 46.0},  # misil (splash radio 46px al llegar)
-	# zona/lanzallamas — proj_type sigue en 5 (PROJ_ZONE) A PROPÓSITO, ver nota de
-	# familia BEAM arriba. range/proj_extra/dot_linger ya son el diseño objetivo
-	# (rectángulo ancho 70px × largo 90px, dps bajo, linger largo) pero
-	# _tick_zone() (projectile_system.gd) todavía los ignora — sigue usando
-	# proj_extra como radio circular y ZONE_LIFE (tower_system.gd) en vez de
-	# dot_linger hasta que se migre a _tick_beam().
-	# fire_rate 2.2 (no 0.0): bug encontrado 08-ago en re-corrida del benchmark
-	# conjunto — proj_type sigue en 5 (PROJ_ZONE, cooldown-gated en
-	# TowerSystem.tick()), no TOWER_MODE_BEAM (que se salta el cooldown por
-	# diseño, ver _tick_laser()). Con fire_rate 0.0 esta fila recargaba
-	# instantáneamente y plantaba una zona nueva CADA FRAME sin límite —
-	# cientos de PROJ_ZONE simultáneas, cada una con hash.query_nearby() por
-	# tick (docs/fase2-benchmark-conjunto.md). No era artefacto del inyector
-	# sintético, era esta fila. Valor restaurado al que tenía antes del
-	# rediseño BEAM; re-evaluar cuando exista _tick_beam() y esta fila migre
-	# a TOWER_MODE_BEAM de verdad (ver nota "Estado de implementación" arriba).
-	5: {"range": 90.0, "fire_rate": 2.2, "damage": 3.0, "proj_type": 5, "proj_extra": 70.0, "dot_linger": 1.6},
-	# láser — familia BEAM, rectángulo angosto y largo, linger corto.
-	6: {"range": 200.0, "fire_rate": 0.0, "damage": 8.0, "proj_type": TOWER_MODE_BEAM, "proj_extra": 24.0, "dot_linger": 0.4},
+	4: {"range": 240.0, "fire_rate": 1.6, "damage": 9.0, "proj_type": 4, "proj_extra": 46.0},  # misil / "Mortero" (splash radio 46px al llegar)
+	# lanzallamas / "Fuego" — familia BEAM (rectángulo ancho 70px × largo 90px, DoT bajo, linger largo).
+	# fire_rate sin uso (BEAM no pasa por el cooldown de disparo, ver tower_system.gd::tick()).
+	5: {"range": 90.0, "fire_rate": 0.0, "damage": 3.0, "proj_type": TOWER_MODE_BEAM, "proj_extra": 70.0, "dot_linger": 1.6},
+	6: {"range": 200.0, "fire_rate": 0.0, "damage": 8.0, "proj_type": TOWER_MODE_BEAM, "proj_extra": 24.0, "dot_linger": 0.4}, # láser — rectángulo angosto y largo, linger corto
 	7: {"range": 260.0, "fire_rate": 1.2, "damage": 26.0, "proj_type": TOWER_MODE_RAIL, "proj_extra": 14.0}, # riel (ancho de corredor, ya vivía como RAIL_HIT_WIDTH hardcodeado)
 }
 

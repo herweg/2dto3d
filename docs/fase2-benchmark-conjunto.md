@@ -359,3 +359,123 @@ Si después de esto el número sigue sin pasar el 20%, ahí sí correspondería
 la opción 3 original (estirar `SimHotPath` a zona/misil) — pero no antes de
 medir el resultado de esta migración, que ya estaba a medio camino y ataca
 la causa, no el síntoma.
+
+---
+
+## 8. Migración `_tick_beam()` aplicada — cierra (08-ago)
+
+Los 4 puntos del pedido de la sección 7, en el mismo pase:
+
+1. **`SpatialHash.query_radius(pos, radius)`** (nuevo, `spatial_hash.gd`) —
+   generalización de `query_nearby()` a radios mayores a una celda:
+   candidatos de un cuadrado de `2×radius`, sin barrer `active_count`.
+2. **`TowerSystem._tick_beam(i, delta)`** (reemplaza `_tick_laser()`) —
+   geometría de rectángulo (`range`=largo, `proj_extra`=ancho), candidatos
+   acotados por `hash.query_radius()`, mismo chequeo dot-product/perpendicular
+   que ya probó `_tick_rail()`. Reselecciona a `BEAM_RETARGET_INTERVAL = 1/8s`
+   (8Hz), no cada tick — reusa `cooldown_left` como timer, que en las filas
+   BEAM no se usaba para nada hasta ahora.
+3. **Fila 5 (lanzallamas) migrada** de `proj_type: PROJ_ZONE` a
+   `TOWER_MODE_BEAM` — deja de tocar `ProjectileStore` por completo. El
+   bug de `fire_rate: 0.0` de la sección 6 queda sin efecto (BEAM nunca lee
+   `fire_rate`, ver `tower_system.gd::tick()`) — no hizo falta decidir un
+   valor puente, la migración lo vuelve irrelevante.
+4. **`stress_main.gd`**: `ZONE_FIXED_COUNT` a `0` (ninguna torre real
+   spawnea `PROJ_ZONE` ya, sostener zonas sintéticas mediría un mecanismo
+   que el juego no tiene) y comentario de `mode=joint` corregido (5 tipos
+   viajeros, no 6).
+
+**Nomenclatura del catálogo, en el mismo pase** (`docs-torretas-diseno.md`,
+sección de revisión 08-ago): Mortero (#9) = misil del motor (arco + delay +
+splash), Fuego (#11) = lanzallamas del motor (DoT de área) — correspondencia
+mecánica, no arbitraria. Riel (#3) sigue confirmado distinto de láser. **Lo
+que sigue sin resolver, porque es diseño y no nomenclatura:** si láser tiene
+entrada propia en el catálogo de 20 o si Riel lo reemplaza — esa pregunta no
+la fuerzo, queda igual de abierta que antes.
+
+### Número crudo — dos corridas, mismo método de las secciones 5-6
+
+`mode=joint proj-type=realistic`, sin diagnóstico adicional porque **cerró
+limpio, no hizo falta aislar nada**:
+
+| Corrida | Régimen sostenido (post-rampa) |
+|---|---|
+| 1 (`stress_joint_1786210888.csv`) | 60.3-85.8fps, ni una muestra por debajo de 60 |
+| 2 (`stress_joint_1786210916.csv`) | 65.1-87.0fps, ni una muestra por debajo de 60 |
+
+**2.400 enemigos, ~3.400-3.600 proyectiles (mezcla realista, 5 tipos
+viajeros — ya sin zona sintética), 24 torres reales (8 tipos, láser y
+lanzallamas migrados a `TOWER_MODE_BEAM`), backend nativo: sostenido por
+encima de 60fps en las dos corridas, sin valles por debajo del umbral.**
+Pasa la regla del 20% de T4 con margen real, no un empate técnico — a
+diferencia de las secciones 3 y 6.
+
+**Por qué esto y no las opciones 2/3 originales:** la fila 5 dejó de ocupar
+un slot de `ProjectileStore` — no hay `ttl`/swap-remove/`query_nearby()` por
+tick que optimizar, el mecanismo completo que causaba el costo (secciones 2
+y 6) desapareció. Consistente con lo que ya anotaba la sección 7: atacó la
+causa, no el síntoma, y el resultado lo confirma.
+
+**No hace falta extender `SimHotPath` a zona/misil** — la condición del
+pedido original ("si con eso todavía no pasa el 20%") no se cumple. Zona ya
+no tiene fuente real que sostenga volumen; misil sigue resolviendo una sola
+vez al llegar, nunca fue el costo por tick que importaba medir.
+
+**Siguiente paso, sin bloquear nada de lo anterior:** benchmark de VFX en
+GPU (`docs/diseno-grafico.md` sección 5), ya secuenciado detrás de este piso
+de CPU — que ahora sí queda confiable para apoyarlo.
+
+---
+
+## 9. Tests reales en `Level1.tscn` (no el arnés sintético) — bug encontrado (08-ago)
+
+Todo lo de las secciones 1-8 corrió sobre `stress_main.gd`, el arnés de
+benchmark. Antes de dar la migración por buena de verdad, faltaba probarla
+donde el jugador la va a usar: la pantalla jugable real
+(`level_controller.gd`, `Level1.tscn`), con los 8 tipos colocados de
+verdad y estadísticas reales (`real-stats`, nuevo flag CLI — pone
+`DEV_RANGE_OVERRIDE`/`DEV_FIRE_RATE_OVERRIDE` en 0.0 para esa corrida, sin
+tocar el default que sigue usando la verificación visual de siempre).
+
+**Primer resultado, familia BEAM aislada (`place-types=5,6`, stats reales,
+30s): 0 muertes.** Ni lanzallamas ni láser mataron un solo enemigo en 30
+segundos — sospechoso, porque la geometría de `_tick_beam()` ya corrió sin
+errores miles de veces en el benchmark conjunto.
+
+**Causa: `level_controller.gd` nunca instanció ni tickeaba `DotSystem`.**
+`stress_main.gd` sí lo hace desde que se congelaron los 7 tipos (sección 1)
+— la pantalla jugable real, no. `_tick_beam()`/`_tick_laser()` (antes) sí
+escribían `enemy_store.dot_dps`/`dot_time_left` correctamente, pero nada
+en `Level1.tscn` los consumía para restarle vida a `health` — el DoT nunca
+hizo daño en la pantalla real desde que existe, solo se medía "vivo" en el
+benchmark sintético. No es un bug de esta migración — es un gap que esta
+migración expuso al ser la primera vez que alguien corrió láser/lanzallamas
+contra enemigos reales fuera de `stress_main.gd`.
+
+**Fix:** `level_controller.gd` instancia `DotSystem` en `_ready()` y lo
+tickea en `_process()`, mismo patrón que `stress_main.gd`.
+
+### Verificación por tipo, aislado, con el fix (stats reales, 30s, 8 torres del mismo tipo salvo donde se indica)
+
+| Configuración | Muertes | Activos al final | Leaks |
+|---|---|---|---|
+| Lanzallamas solo (×8) | 19 | 6 | 0 |
+| Láser solo (×8) | 23 | 2 | 0 |
+| Riel solo (×8) | 25 | 0 | 0 |
+| BEAM combinado (5+6 alternados, ×8) | 21 | 4 | 0 |
+| **Los 8 tipos juntos** (`place-all-towers`) | 27 | 0 | 0 |
+
+Cero leaks en todos los casos — todo enemigo que se spawneó murió antes de
+llegar a la meta, con estadísticas reales (no `DEV_RANGE_OVERRIDE`), en la
+pantalla jugable de verdad. Captura de la corrida combinada:
+`level1_screenshot_t14.png` (8 torres de los 8 colores en la zona gris,
+proyectiles activos en el carril).
+
+**Herramientas nuevas en `level_controller.gd`**, quedan disponibles para
+la próxima vez que haga falta verificar algo en esta pantalla sin pasar por
+`stress_main.gd`: `place-all-towers` (los 8 tipos, uno de cada), `place-types=<csv>`
+(subconjunto arbitrario, para aislar como arriba), `real-stats` (stats
+reales en vez del override de desarrollo). `LaneEnemySystem.killed_count`
+(nuevo, junto a `leaked_count` que ya existía) — necesario para poder
+distinguir "murió por daño" de "llegó vivo a la meta" sin instrumentación
+ad-hoc.
