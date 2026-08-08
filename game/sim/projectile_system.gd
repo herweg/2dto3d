@@ -19,10 +19,19 @@ var hits_last_tick: int = 0
 ## está en otro lado. No es parte del diseño final — solo instrumentación.
 var skip_collision: bool = false
 
+## Ruta B (Paso 4): instancia de SimHotPath (game/rust/), o null si el
+## GDExtension no está cargado. Cuando está seteada, tick_native() reemplaza
+## la búsqueda de colisión por-proyectil de tick() por una sola llamada al
+## batch nativo, por frame.
+var native: Object = null
+
+var _dead_marks: PackedByteArray
+
 func _init(p_proj: ProjectileStore, p_enemy: EnemyStore, p_hash: SpatialHash) -> void:
 	proj_store = p_proj
 	enemy_store = p_enemy
 	hash = p_hash
+	_dead_marks.resize(p_proj.capacity)
 
 func tick(delta: float) -> void:
 	hits_last_tick = 0
@@ -50,3 +59,42 @@ func _check_collision(i: int) -> bool:
 	enemy_store.health[e_idx] -= proj_store.damage[i]
 	hits_last_tick += 1
 	return true
+
+## Ruta B: movimiento en GDScript (igual que tick()), colisión en un solo
+## batch nativo (SimHotPath.find_collisions — game/rust/src/lib.rs), y el
+## swap-remove se resuelve acá con los resultados. Índices estables entre el
+## batch de movimiento y la llamada nativa: nada se remueve hasta el final.
+func tick_native(delta: float) -> void:
+	hits_last_tick = 0
+	var count := proj_store.active_count
+
+	for i in count:
+		proj_store.positions[i] += proj_store.velocities[i] * delta
+		proj_store.ttl[i] -= delta
+		_dead_marks[i] = 1 if proj_store.ttl[i] <= 0.0 else 0
+
+	if not skip_collision:
+		var pairs: PackedInt32Array = native.find_collisions(
+			proj_store.positions, count,
+			enemy_store.positions, enemy_store.active_count,
+			HIT_RADIUS, hash.cell_size
+		)
+		var j := 0
+		while j < pairs.size():
+			var p_idx := pairs[j]
+			var e_idx := pairs[j + 1]
+			if _dead_marks[p_idx] == 0:
+				enemy_store.health[e_idx] -= proj_store.damage[p_idx]
+				hits_last_tick += 1
+				_dead_marks[p_idx] = 1
+			j += 2
+
+	var i := 0
+	while i < proj_store.active_count:
+		if _dead_marks[i] == 1:
+			var last := proj_store.active_count - 1
+			if i != last:
+				_dead_marks[i] = _dead_marks[last]
+			proj_store.release(i)
+		else:
+			i += 1

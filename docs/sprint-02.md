@@ -2,9 +2,11 @@
 
 **Rol:** desarrollador único (PM + Dirección de Desarrollo), con apoyo de Claude
 Code para la ruta GDExtension.
-**Estado:** Ruta A completa y medida (no alcanza el objetivo — ver Paso 3).
-Ruta B aprobada por el director, lenguaje resuelto (Rust). Listo para arrancar
-Paso 4 — sin fecha asignada, se retoma a discreción.
+**Estado: SPIKE CERRADO (07-ago-2026).** Ruta A completa y medida (no alcanza
+el objetivo — ver Paso 3). Ruta B (Rust) implementada y medida — alcanza el
+objetivo dentro del rango probado (ver Paso 4). Paso 5 (`WorkerThreadPool`)
+no hizo falta. Paso 6 (checkpoint de decisión formal) cerrado con firma del
+director — ver esa sección. Fase 2 queda habilitada para planificarse.
 **Input congelado:** `docs/definicion-escala-v1.md` (todos los campos cerrados),
 `docs/combat-design-v1.md` (T3), `docs/projectile-variety-v1.md` (T5),
 `docs/directorsuggestions.md` (arquitectura propuesta).
@@ -237,6 +239,46 @@ no una que corresponda cerrar en ingeniería sola — ver Paso 4.
 - Repetir el mismo barrido sintético del Paso 3, mismo objetivo, mismo
   hardware.
 
+#### Resultado — Ruta B (07-ago-2026)
+
+Implementado tal como pidió la nota de alcance del director: `SimHotPath`
+(`game/rust/src/lib.rs`) recibe los arrays crudos de posición de ambos
+stores por valor, construye la grilla y resuelve el batch completo de
+colisión en una sola llamada por frame (`find_collisions`), devolviendo
+pares `[proj_idx, enemy_idx]` — GDScript aplica el daño y el swap-remove
+(que igual tiene que tocar los stores). Cero llamadas nativas por-entidad.
+Mismo hardware y mismo barrido sintético que Ruta A —
+`game/sim/projectile_system.gd::tick_native()` corre en paralelo a
+`tick()`, elegible con `backend=native` sin recompilar.
+
+- **El frame time no cruza nunca el presupuesto de 60fps en toda la
+  corrida.** Se mantiene en 144fps (6.9ms) sin variación medible hasta
+  ~6.000 proyectiles / 1.500 enemigos — el rango exacto donde Ruta A ya
+  había caído a ~40fps. Sube recién después de eso, a ~9-10ms (100-115fps)
+  entre 7.000-8.500 proyectiles / 2.000-2.500 enemigos, y se estabiliza en
+  ~10-12ms (82-99fps) con el pico de enemigos (3.000) — siempre con margen
+  contra el presupuesto de 16.7ms.
+- La población de proyectiles vuelve a estabilizarse por debajo del pico de
+  spawn (~7.300-8.500, no 12.000) por la misma dinámica de consumo rápido
+  contra el anillo denso de enemigos que ya se documentó en Ruta A — no es
+  un techo de Ruta B, es el mismo límite del caso sintético. Como el frame
+  time nunca se acerca al presupuesto ni siquiera en ese plateau, **no hay
+  evidencia de que el motor esté cerca de un techo real** dentro del rango
+  medido — a diferencia de Ruta A, donde el techo era claramente del motor,
+  no del caso de prueba.
+- Verificación visual: capturas en `game/benchmark_results/screenshot_t*.png`
+  confirman el render correcto (mismo pipeline `entity_render_sync.gd` que
+  Ruta A, sin cambios).
+
+**Conclusión: Ruta B (Rust) alcanza el objetivo de T2 dentro del rango
+medido**, con margen de frame time de sobra — no hizo falta llegar a
+`WorkerThreadPool` (Paso 5). Queda pendiente, como mejora de metodología
+más que como bloqueante, ajustar el caso sintético (menor densidad de
+enemigos o mayor `proj_life`) para forzar la población hasta el pico de
+12.000/3.000 exacto y confirmar dónde cae de 60fps *a esa población* — hoy
+se sabe que aguanta cómodo hasta donde el caso sintético llegó, no cuál es
+el techo real de Ruta B.
+
 ### Paso 5 — `WorkerThreadPool` (condicional a que Ruta B tampoco alcance)
 
 Paralelizar el batch de colisión+daño en chunks sobre `WorkerThreadPool`. Es
@@ -252,6 +294,91 @@ alcanzaron, no como optimización prematura sin medir.
 - Con esto se define el alcance real de Fase 2 (rediseño de núcleo con
   contenido real, congelado contra `combat-design-v1.md` y
   `projectile-variety-v1.md`) — no antes.
+
+**Estado preliminar (07-ago-2026) — datos listos, falta la firma formal del
+PM/director:**
+
+- **Ruta B (Rust) alcanza el objetivo de T2** dentro del rango que el caso
+  sintético logró sostener (~7.300-8.500 proyectiles / hasta 3.000 enemigos,
+  frame time siempre <13ms — presupuesto de 60fps es 16.7ms). No llegó a
+  necesitar `WorkerThreadPool` (Paso 5) — no se activó esa palanca.
+- **No se reabre memo Q7 (motor).** La condición de reapertura (~60% del
+  objetivo con GDExtension de un hilo, `definicion-escala-v1.md`) ni siquiera
+  se acercó a activarse — Ruta B midió con margen de sobra, no al límite.
+  Godot + GDExtension en Rust queda confirmado como la arquitectura.
+- **Pendiente antes de cerrar el spike de verdad:** el caso sintético nunca
+  forzó la población hasta el pico exacto de 12.000/3.000 (se estabiliza
+  antes por su propia dinámica de consumo, ver Paso 4) — así que "alcanza el
+  objetivo" está confirmado en el rango medido, no en el pico exacto. Vale
+  un ajuste chico del caso de prueba (bajar densidad de enemigos o subir
+  `proj_life`) antes de dar el spike por cerrado del todo, no porque haya
+  señal de problema, sino para tener el número exacto en el pico y no solo
+  "con margen cómodo hasta donde llegó".
+- Fase 2 (rediseño de núcleo con contenido real) puede empezar a planificarse
+  con esta base — arquitectura validada, lenguaje del hot path resuelto.
+
+> **Director — firma formal de cierre, 07-ago:** reviso `game/rust/src/lib.rs`
+> y la integración (`projectile_system.gd::tick_native()`,
+> `benchmark_main.gd`) contra la nota de alcance que dejé en Paso 4 — cumple:
+> una sola llamada nativa por frame, arrays completos de ida
+> (`proj_positions`/`enemy_positions` por valor), grilla construida adentro
+> de esa misma llamada, resultado plano de vuelta (`[proj_idx, enemy_idx,
+> ...]`). Cero llamadas por-entidad cruzando el borde FFI. El semántico de
+> "primer impacto en orden de celda" se preserva idéntico a Ruta A —
+> `tick_native()` no introduce ningún comportamiento nuevo, solo lo acelera.
+> No encontré bugs.
+>
+> **Apruebo el cierre del spike en estos términos:**
+> 1. **Ruta B (Rust) satisface el objetivo de T2** dentro del rango que el
+>    caso sintético logró sostener. No se reabre memo Q7 — Godot + GDExtension
+>    en Rust queda como arquitectura confirmada, sin condiciones.
+> 2. **Acepto los dos huecos metodológicos pendientes como riesgo conocido,
+>    no bloqueante — se llevan a Fase 2, no se resuelven acá:**
+>    - El caso sintético nunca forzó la población hasta el pico exacto de
+>      12.000/3.000 (se estabiliza antes por su propia dinámica). El margen
+>      medido (nunca por encima de ~13ms contra un presupuesto de 16.7ms) hace
+>      razonable asumir que sostiene el pico, pero no está *medido* — el
+>      primer benchmark de Fase 2, sobre contenido real, debería confirmarlo
+>      en vez de heredar el supuesto sin más.
+>    - Todo lo medido es en la máquina de desarrollo, **por encima** del
+>      hardware mínimo objetivo (T4) — la propia tabla del artifact lo marca
+>      como "cota optimista". El margen es grande (colisión pasó de ser el
+>      cuello de botella a ~cero costo medible), así que no lo tomo como
+>      motivo para no avanzar, pero tampoco lo doy por confirmado en hardware
+>      mínimo real hasta que alguien lo corra ahí.
+> 3. **No hace falta otra ronda de medición para cerrar el spike.** Los dos
+>    puntos de arriba no son señal de que algo esté mal — son la diferencia
+>    entre "spike que valida una arquitectura" y "certificación de producción",
+>    y esta última le corresponde a Fase 2 con contenido real, no a otra
+>    vuelta de este caso sintético.
+>
+> **Spike DONE.** Fase 2 queda habilitada para planificarse sobre esta base.
+
+---
+
+## Insumo adicional reconciliado: `docs/referencia-orc-problem.md`
+
+Este es el checkpoint que ese documento pedía esperar. Resuelvo sus tres
+puntos abiertos acá — detalle y resolución completa en el propio archivo:
+
+1. **Número de T2:** no se toca. El margen que acaba de demostrar Ruta B es
+   evidencia a favor de la arquitectura, no evidencia de que sostenga
+   *enemigos* en el orden de decenas de miles — eso rompe la asimetría en la
+   que se apoya la grilla (construida sobre el lado barato) y no está medido
+   en ningún lado. Si en Fase 2 alguien quiere perseguir ese número en serio,
+   necesita su propio spike, no lo hereda gratis de este.
+2. **Torres fijas + enemigos en carril vs. jugador móvil + armas:**
+   recomendación del director, no decisión unilateral — adoptar el modelo de
+   torres+carril como dirección de Fase 2. Es coherente con el nombre y el
+   espíritu del proyecto, y el POC de horde-survivor ya cumplió su función
+   (validar patrones de rendimiento), no tiene por qué ser también el loop de
+   juego final. Queda pendiente de confirmación explícita del lado de
+   producto antes de que Fase 2 arranque contenido real — mismo desarrollador,
+   otro sombrero, pero el cambio de género amerita decirlo en voz alta, no
+   asumirlo por inercia técnica.
+3. **Rediseño de `spatial_hash.gd`/`SimHotPath` sobre ambas poblaciones:**
+   condicional a que el punto 1 se responda que sí en algún momento. No se
+   toca ahora.
 
 ---
 

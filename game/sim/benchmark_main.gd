@@ -20,6 +20,7 @@ const SPATIAL_CELL_SIZE := 24.0  # ~2x HIT_RADIUS de projectile_system.gd — ve
 var _level_duration := DEFAULT_LEVEL_DURATION
 var _hold_at_peak := DEFAULT_HOLD_AT_PEAK
 var _skip_collision := false
+var _backend := "gdscript"  # "gdscript" (Ruta A) | "native" (Ruta B — game/rust/)
 
 var _proj_store: ProjectileStore
 var _enemy_store: EnemyStore
@@ -48,15 +49,23 @@ func _ready() -> void:
 	_enemy_system = EnemySystem.new(_enemy_store)
 	_spawner = BenchmarkSpawner.new(_proj_store, _enemy_store, PROJ_LEVELS.duplicate(), ENEMY_LEVELS.duplicate(), _level_duration)
 
+	if _backend == "native":
+		if ClassDB.class_exists("SimHotPath"):
+			_proj_system.native = ClassDB.instantiate("SimHotPath")
+		else:
+			push_error("[benchmark] backend=native pedido pero SimHotPath no está registrado — ¿falta compilar game/rust/ o el .gdextension no cargó?")
+			get_tree().quit(1)
+			return
+
 	_proj_render = EntityRenderSync.new(MAX_PROJ, 8.0, Color(1.0, 0.85, 0.2))
 	_enemy_render = EntityRenderSync.new(MAX_ENEMY, 16.0, Color(0.85, 0.2, 0.25))
 	add_child(_proj_render.get_node2d())
 	add_child(_enemy_render.get_node2d())
 
-	var tag := "nocollision" if _skip_collision else "route_a"
+	var tag := ("nocollision" if _skip_collision else _backend)
 	var out_path := "res://benchmark_results/%s_%d.csv" % [tag, Time.get_unix_time_from_system()]
 	_logger = BenchmarkLogger.new(out_path)
-	print("[benchmark] Ruta A — GDScript puro (skip_collision=%s). Log: %s" % [_skip_collision, out_path])
+	print("[benchmark] backend=%s (skip_collision=%s). Log: %s" % [_backend, _skip_collision, out_path])
 	print("[benchmark] niveles proyectiles: ", PROJ_LEVELS, " | niveles enemigos: ", ENEMY_LEVELS)
 
 func _parse_cli_args() -> void:
@@ -71,6 +80,8 @@ func _parse_cli_args() -> void:
 				_hold_at_peak = parts[1].to_float()
 			"skip-collision":
 				_skip_collision = parts[1] == "1"
+			"backend":
+				_backend = parts[1]
 
 func _process(delta: float) -> void:
 	if _quitting:
@@ -80,8 +91,12 @@ func _process(delta: float) -> void:
 
 	_spawner.tick(delta)
 	_enemy_system.tick(delta)
-	_hash.build(_enemy_store)
-	_proj_system.tick(delta)
+
+	if _backend == "native":
+		_proj_system.tick_native(delta)
+	else:
+		_hash.build(_enemy_store)
+		_proj_system.tick(delta)
 
 	_proj_render.sync(_proj_store.positions, _proj_store.active_count)
 	_enemy_render.sync(_enemy_store.positions, _enemy_store.active_count)
