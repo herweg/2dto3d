@@ -42,6 +42,14 @@ var _tower_type_arg := 3  # splash ("las explosivas") por default para mode=towe
 var _level_duration := DEFAULT_LEVEL_DURATION
 var _hold_at_peak := DEFAULT_HOLD_AT_PEAK
 
+## A/B de gráficos y animación (ver docs/) — sprite=1 activa sprite animado
+## en mode=enemies en vez de color plano, mismo ENEMY_LEVELS, para medir el
+## costo real contra el ~5.730 ya conocido del color plano.
+var _sprite_arg := false
+const SPRITE_SHEET := "res://assets/characters.png"
+const SPRITE_ROW := 1  # fila 1 del atlas = goblin (tipo 0)
+const SPRITE_ANIM_INTERVAL := 0.2
+
 var _level: LevelDef
 var _enemy_store: EnemyStore
 var _proj_store: ProjectileStore
@@ -86,6 +94,12 @@ func _ready() -> void:
 	add_child(_proj_render.get_node2d())
 	add_child(_tower_render.get_node2d())
 
+	if _sprite_arg and _mode == "enemies":
+		var atlas := SpriteAtlas.new(SPRITE_SHEET)
+		var idle := atlas.crop_frame(0, SPRITE_ROW)
+		var walk := atlas.crop_frame(1, SPRITE_ROW)
+		_enemy_render.set_sprite(idle, walk, SPRITE_ANIM_INTERVAL)
+
 	match _mode:
 		"projectiles":
 			_levels = PROJ_LEVELS
@@ -98,9 +112,10 @@ func _ready() -> void:
 	var total_time: float = _level_duration * _levels.size() + _hold_at_peak
 	_shot_times = [total_time * 0.5, total_time * 0.95]
 
-	var out_path := "res://benchmark_results/stress_%s_%d.csv" % [_mode, Time.get_unix_time_from_system()]
+	var tag := (_mode + "_sprite") if (_sprite_arg and _mode == "enemies") else _mode
+	var out_path := "res://benchmark_results/stress_%s_%d.csv" % [tag, Time.get_unix_time_from_system()]
 	_logger = BenchmarkLogger.new(out_path)
-	print("[stress] modo=%s niveles=%s tipo_proy=%s tipo_torre=%d log=%s" % [_mode, str(_levels), _proj_type_arg, _tower_type_arg, out_path])
+	print("[stress] modo=%s sprite=%s niveles=%s tipo_proy=%s tipo_torre=%d log=%s" % [_mode, _sprite_arg, str(_levels), _proj_type_arg, _tower_type_arg, out_path])
 
 func _parse_cli_args() -> void:
 	for arg in OS.get_cmdline_user_args():
@@ -118,6 +133,8 @@ func _parse_cli_args() -> void:
 				_level_duration = parts[1].to_float()
 			"hold-at-peak":
 				_hold_at_peak = parts[1].to_float()
+			"sprite":
+				_sprite_arg = parts[1] == "1"
 
 func _current_target() -> int:
 	return _levels[_level_idx]
@@ -195,6 +212,8 @@ func _process(delta: float) -> void:
 	if _mode == "towers":
 		_tower_system.tick(delta)
 
+	if _sprite_arg and _mode == "enemies":
+		_enemy_render.advance_animation(delta)
 	_enemy_render.sync(_enemy_store.positions, _enemy_store.active_count)
 	_proj_render.sync(_proj_store.positions, _proj_store.active_count, _proj_store.type_id)
 	_tower_render.sync(_tower_store.positions, _tower_store.active_count, _tower_store.type_id)

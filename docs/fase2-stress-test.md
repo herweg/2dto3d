@@ -10,7 +10,9 @@ dónde cae de 60fps (16.7ms) y separar el costo de cada pieza.
 **Reporte visual completo (curvas, capturas):** ver artifact publicado en
 esta sesión de trabajo.
 **Máquina de medición:** la misma del spike de Sprint 2 (i5-9400, Radeon RX
-Vega) — cota optimista, no el piso de hardware mínimo.
+Vega). **Actualización (PM, 08-ago):** T4 se redefinió para coincidir con
+esta máquina (ver `definicion-escala-v1.md`) — ya no es cota optimista, es
+el piso de hardware mínimo real.
 
 ---
 
@@ -70,6 +72,59 @@ lista de niveles (`ENEMY_LEVELS`/`PROJ_LEVELS`/`TOWER_LEVELS` en
   `SimHotPath` hoy no sabe de los 4 tipos (`tick_native()` en
   `projectile_system.gd` tiene la nota); extenderlo ahí es la palanca que
   ya existe.
+
+## Addendum — gráficos y animación (08-ago-2026)
+
+**Pregunta del director:** ¿cuánto cuesta reemplazar el color plano por
+sprite animado (`game/assets/characters.png`, atlas 5×5 ya copiado del
+POC)? Hipótesis de trabajo del director: casi nulo, porque el swap de
+textura es una asignación por store por frame, no por instancia — a
+falsear con el benchmark, no a asumir.
+
+**Qué se construyó**, exactamente según la especificación:
+
+- `game/render/sprite_atlas.gd` — recorta frames del atlas, portado tal
+  cual de `POC/scripts/enemy_renderer.gd::_crop_frame()`.
+- `entity_render_sync.gd` — `set_sprite(idle, walk, interval)` (asigna
+  `_mmi.texture`, guarda los 2 frames) y `advance_animation(delta)` (swap
+  de textura completa cada `interval` segundos, sin UV por instancia).
+- `stress_main.gd` — flag `sprite=1`, `mode=enemies` únicamente: mismo
+  `ENEMY_LEVELS` (300→7.000), mismo `BenchmarkLogger`, mismo tamaño de
+  quad que el color plano (14px, a propósito — para que el único cambio
+  real sea textura+animación, no también el fill rate de un quad más
+  grande). Corridos en el mismo run de sesión, uno atrás del otro, para
+  una comparación limpia.
+
+**Resultado — la hipótesis del director se confirma:**
+
+| | Color plano | Sprite animado |
+|---|---|---|
+| Cae de 60fps en | 6.998 enemigos (16.68ms) | 6.998 enemigos (17.04ms) |
+| A 3.500 | 11.6ms | 11.6ms |
+| A 5.000 | 11.9ms | 12.1ms |
+
+Las dos curvas se superponen en todo el rango medido (300→7.000) — la
+diferencia está dentro del ruido de medición, no es una tendencia real.
+**El costo de animar por swap de textura es, en la práctica, cero** frente
+al costo ya identificado (la subida del buffer, `multimesh_set_buffer`,
+que no cambia entre las dos corridas). Confirmado con el benchmark, no
+asumido.
+
+**Implicancia:** no hace falta invertir en UV por instancia (shader de
+atlas per-instance) para tener sprites animados a esta escala — el
+mecanismo más barato ya alcanza. Esa inversión queda disponible si más
+adelante se necesita variedad visual por-instancia dentro del mismo grupo
+(hoy `set_sprite()` es un solo par idle/walk por store, no por tipo).
+
+> **Segunda revisión, 08-ago:** verifiqué el código (`sprite_atlas.gd`,
+> `entity_render_sync.gd::set_sprite()`/`advance_animation()`, el flag
+> `sprite=1` en `stress_main.gd`) contra lo reportado — coincide exactamente.
+> El resultado no es solo "medido y no hay diferencia": es lo que predice el
+> propio modelo de `MultiMeshInstance2D` (la textura vive en el nodo, no por
+> instancia), así que la medición confirma una expectativa de motor, no
+> reemplaza el razonamiento. Diseño A/B correcto (mismo quad, mismo
+> `ENEMY_LEVELS`, una sola variable real). Sin objeciones — apruebo subir
+> este trabajo.
 
 ## Nota sobre las variables de desarrollo activas
 

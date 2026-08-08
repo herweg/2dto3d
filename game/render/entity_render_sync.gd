@@ -16,6 +16,16 @@ var _capacity: int
 var _stride: int = STRIDE_2D
 var _type_colors: Array = []  # vacío = un solo color (modulate), como siempre
 
+## Animación por swap de textura completa (Fase 2 — gráficos y animación).
+## No es UV por instancia — es la versión más barata de animar, a medir
+## contra el color plano antes de invertir en un shader de atlas
+## per-instance. Mutuamente excluyente con set_type_colors() por ahora.
+var _idle_tex: Texture2D
+var _walk_tex: Texture2D
+var _anim_interval: float = 0.2
+var _anim_timer: float = 0.0
+var _anim_frame: int = 0
+
 func _init(p_capacity: int, quad_size: float, color: Color) -> void:
 	_capacity = p_capacity
 
@@ -52,6 +62,30 @@ func set_type_colors(colors: Array) -> void:
 	_stride = STRIDE_2D_COLOR
 	_buffer.resize(_capacity * _stride)
 	_mmi.modulate = Color.WHITE
+
+## Asigna los dos frames de animación (idle/caminar) — un solo texture por
+## store, no por instancia. Reemplaza el modulate de color plano.
+func set_sprite(idle: Texture2D, walk: Texture2D, interval: float = 0.2) -> void:
+	_idle_tex = idle
+	_walk_tex = walk
+	_anim_interval = interval
+	_anim_timer = 0.0
+	_anim_frame = 0
+	_mmi.modulate = Color.WHITE
+	_mmi.texture = idle
+
+## Una llamada por store por frame (no por instancia): swap de
+## `_mmi.texture` cada `interval` segundos. Godot dibuja todas las
+## instancias del MultiMesh con la textura vigente del nodo — el costo no
+## escala con la cantidad de instancias.
+func advance_animation(delta: float) -> void:
+	if _idle_tex == null:
+		return
+	_anim_timer += delta
+	if _anim_timer >= _anim_interval:
+		_anim_timer = 0.0
+		_anim_frame = 1 - _anim_frame
+		_mmi.texture = _walk_tex if _anim_frame == 1 else _idle_tex
 
 ## Empaqueta positions[0..count) (+ color por type_ids, si se llamó
 ## set_type_colors) en el buffer plano y hace una sola escritura a
