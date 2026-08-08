@@ -158,3 +158,64 @@ elegir ninguna todavía:
 Ninguna de las tres es urgente — es información para la próxima decisión
 de motor, no una alarma. Gráficos, calibración de combate, y el resto del
 diseño en papel siguen sin bloquearse por esto.
+
+---
+
+## 5. Director — hallazgo en la revisión de código, y por qué el 58-65fps no queda aprobado (08-ago)
+
+Revisando `tick_native()` (`projectile_system.gd`) para entender de dónde
+salía el número, encontré un bug real, ya corregido en el mismo archivo:
+
+**El bug.** El primer loop de `tick_native()` (movimiento + muerte por ttl)
+solo escribía `_dead_marks[i]` en la rama de proyectiles "viajeros" — las
+ramas de `PROJ_ZONE`/`PROJ_MISSILE` nunca tocaban ese array cuando seguían
+vivas. Si un viajero moría por ttl en el slot `i` (escribiendo
+`_dead_marks[i] = 1`) y el swap-remove traía al final del array justo una
+zona o un misil vivo a ocupar ese mismo slot, esa entidad viva heredaba el
+`1` viejo sin que nadie lo corrigiera. La limpieza final del método
+(`if _dead_marks[k] == 1: release(k)`) no distingue por tipo — liberaba esa
+entidad viva por error. El comentario que ya estaba en el código identificaba
+la categoría de riesgo correcta (slot reciclado con basura) pero el clear
+que proponía como solución solo cubre basura *entre* frames, no la que se
+genera *dentro* del mismo frame por un swap a mitad de loop. Fix: todas las
+ramas escriben `_dead_marks[i]` ahora, no solo la de viajeros — tres líneas,
+sin cambiar el contrato de nadie.
+
+**Por qué esto no es un detalle menor para este documento en particular:**
+`mode=joint` corre con `backend=native` por default (`stress_main.gd`), así
+que el 58-65fps reportado en la sección 3 se midió con este bug activo —
+zonas y (con menor probabilidad, porque mueren solo una vez al llegar, no
+por ttl repetido) misiles se estaban destruyendo antes de tiempo durante
+esa misma corrida. No sé decir en qué dirección sesga el número sin
+volver a correrlo: menos zonas vivas de las que `ZONE_FIXED_COUNT` pretendía
+sostener pudo haber *aliviado* el frame time medido (menos
+`hash.query_nearby()` por tick de lo que el diseño del benchmark asumía), lo
+que significa que el 58-65fps podría ser optimista, no pesimista, respecto
+al costo real de sostener 10 zonas de verdad.
+
+**Además, verificación pendiente de metodología, no solo de motor:**
+`_resolve_proj_type()` (`stress_main.gd`) usa la mezcla ponderada
+"realista" (`REALISTIC_PROJ_WEIGHTS`) solo si `proj-type=realistic` se pasó
+explícito por línea de comandos — el default de `_proj_type_arg` es
+`"mixed"` (uniforme entre los primeros 4 tipos, sin misil). No tengo
+visibilidad de qué línea de comandos se usó para la corrida reportada en la
+sección 3. Si no se pasó `proj-type=realistic`, "mezcla realista de los 6
+tipos" (tal como lo describe la sección 2) no es lo que efectivamente se
+midió.
+
+**Veredicto: no doy el 58-65fps por válido, en ningún sentido — ni como
+aprobado ni como reprobado.** Con el bug activo y sin confirmar la mezcla de
+proyectiles, no es un número del que se pueda tirar una conclusión todavía.
+Aplico además la regla que la propia PM fijó para T4: "si algo pasa 60fps
+con el objetivo pero no con el 20% extra, no lo cuento como validado" — un
+resultado que *ronda* 60fps con el margen del 20% ya adentro no cumple esa
+regla aunque se mida limpio; con más razón no la cumple mientras el número
+esté en duda por el bug.
+
+**Siguiente paso, antes de tocar nada de la sección 4:** volver a correr
+`mode=joint` con el fix ya aplicado y `proj-type=realistic` explícito en la
+línea de comandos, y recién ahí leer el resultado contra las tres opciones
+que ya deja planteadas la sección 4. No cambio el resto de este documento —
+el diagnóstico de la sección 2 (el problema de las ~300 zonas sintéticas) y
+la corrección de `ZONE_FIXED_COUNT` siguen siendo válidos y bien
+razonados independientemente de este hallazgo.

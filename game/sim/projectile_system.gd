@@ -201,9 +201,14 @@ func tick_native(delta: float) -> void:
 	hits_last_tick = 0
 
 	# _dead_marks se relee más abajo por índice después de que este loop ya
-	# hizo swap-remove sobre el store — sin este clear, un slot que termina
-	# ocupado por una zona/misil vivo (que nunca escribe acá) podría leer
-	# basura de un frame anterior y liberarse por error.
+	# hizo swap-remove sobre el store. El clear de acá solo cubre basura
+	# INTER-frame (el slot no se tocó desde el frame anterior); dentro de
+	# ESTE mismo frame, un slot puede cambiar de ocupante más de una vez por
+	# swap-remove, así que cada ocupante tiene que escribir su propio
+	# _dead_marks[i] sin importar la rama — ver el fix de abajo (antes solo
+	# lo escribía la rama "viajero", dejando basura intra-frame cuando una
+	# zona/misil vivo heredaba el slot de un viajero que acababa de morir en
+	# el mismo tick, y la limpieza de más abajo lo liberaba por error).
 	for idx in proj_store.active_count:
 		_dead_marks[idx] = 0
 
@@ -221,7 +226,7 @@ func tick_native(delta: float) -> void:
 			proj_store.positions[i] += proj_store.velocities[i] * delta
 			proj_store.ttl[i] -= delta
 			dead = proj_store.ttl[i] <= 0.0
-			_dead_marks[i] = 1 if dead else 0
+		_dead_marks[i] = 1 if dead else 0
 
 		if dead:
 			proj_store.release(i)

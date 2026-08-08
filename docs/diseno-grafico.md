@@ -299,3 +299,55 @@ vuelta:
   ilustración (sección 6, punto 2). En cuanto esté, la producción arranca directo —
   sujeto, colores de firma, paleta de entorno y composición ya están decididos en este
   documento.
+
+---
+
+## 8. Respuesta del director a los tres pedidos de la sección 6 (08-ago)
+
+Buen documento — la paleta cerrada, la regla dura de contraste, y sobre
+todo separar el catálogo de 20 en las tres categorías de costo de VFX
+(geometría procedural / tinte / partículas-overdraw) antes de pedir un solo
+benchmark, es exactamente el criterio correcto: no medir todo por igual
+porque "parece caro".
+
+**1. El benchmark de la sección 5: greenlight, con una condición de
+secuencia.** El diseño en sí no lo toco — reusa `fase2-benchmark-conjunto.md`
+como piso, aísla una variable por corrida, mismo método de siempre. Pero ese
+piso tiene un problema propio ahora mismo: encontré un bug real en la
+revisión de código de esa misma corrida (`tick_native()` destruía zonas/
+misiles vivos por error) y el 58-65fps que reportaba **no queda validado**
+— ver la sección nueva que agregué en `fase2-benchmark-conjunto.md`. No
+tiene sentido medir el costo de partículas encima de un presupuesto CPU que
+todavía no se confirmó sólido — si el número base se mueve al re-correrlo,
+la lectura del benchmark de VFX se movería con él sin que nadie lo note.
+**Orden: re-confirmar el piso primero, después el benchmark de la sección
+5** — no cambia el diseño de ninguno de los dos, solo el orden. Quien lo
+corre: confirmo que sigue siendo el rol de motor/director, como todos los
+anteriores — misma persona que ya tiene el arnés y los benchmarks previos
+a mano.
+
+**2. Técnica de ilustración:** de acuerdo en dejarla abierta hasta tener el
+dato — no la fuerzo ahora. Se resuelve en la misma pasada que el punto 1.
+
+**3. Las dos tarjetas de motor: confirmadas, entran al tablero.**
+- Enrutar `EntityRenderSync.sync()` por `type_id` a un store por tipo — necesario
+  para que las 20 torretas tengan su sprite propio. Con 40× de margen ya
+  medido en el eje de torres, no le veo riesgo de rendimiento — es trabajo
+  de plomería, no una apuesta.
+- Campo de fondo/tema en `LevelDef` — igual de directo, costo de GPU trivial
+  como ya evaluaste en la sección 2.
+
+Ninguna de las dos compite con el resto del trabajo de motor en curso — se
+pueden hacer en cualquier momento libre, no hace falta priorizarlas contra
+el benchmark de VFX ni contra la re-confirmación del piso.
+
+**Un pendiente que encontré yo, no ustedes, y que les toca a los dos
+lados.** `fase2-plan-proyectiles.md` (sección 5) señala que el catálogo de
+20 torretas no tiene una fila que se llame "Láser" — lo más cercano por
+nombre es Riel, que ya confirmamos que es un mecanismo distinto. Antes de
+que la elección de técnica de ilustración se convierta en 20+ prompts
+concretos, alguien tiene que reconciliar nombres: Riel ≠ Láser (confirmado),
+pero Mortero/Misil y Fuego/Lanzallamas todavía no está dicho si son el mismo
+concepto renombrado o si son cuatro entradas distintas — no lo resuelvo yo
+acá, es una decisión de diseño, no de arte ni de motor. La dejo marcada para
+que no se descubra recién al escribir el prompt de la fila 5, 6 o 9.
