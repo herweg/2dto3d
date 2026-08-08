@@ -94,6 +94,19 @@ cual. Lo único nuevo es cómo se actualiza `velocity` cada tick.
    como `type_id` nuevos, los 2 campos de DoT en `EnemyStore`, confirmar si
    láser entra a `ProjectileStore` o no (sección 1.2). Esto es diseño de
    datos, no requiere `game/rust/` compilado — puede arrancar ya.
+
+   **Actualización 08-ago:** `docs/docs-torretas-diseno.md` (catálogo de ~20
+   torretas, diseño en papel de la PM) llegó después de este triage y no
+   está reconciliado contra él — ver la revisión al final de ese documento.
+   No cambia el orden de trabajo: el alcance de *este* congelamiento sigue
+   siendo básico/misiles/lanzallamas/láser (lo que ya bloquea el benchmark de
+   2.000/3.000/20). El resto del catálogo (Riel, Mortero, Racimo, Enjambre,
+   y sobre todo las categorías D/E/F, que piden `proj_type` genuinamente
+   nuevos) es contenido para después — extenderlo ahora sería construir por
+   las dudas, exactamente lo que este proyecto viene evitando. Si el
+   benchmark de 20 torres necesita representar más variedad que los 4 tipos
+   actuales + misiles/lanzallamas para ser creíble, esa es una decisión del
+   PM/director a tomar antes del paso 4, no una que yo deba forzar acá.
 2. **Documentar el build reproducible de `game/rust/` — esto ya no es "en
    paralelo, no bloqueante" como dije la vez pasada.** Si el próximo paso es
    literalmente extender `SimHotPath`, alguien va a tener que compilarlo de
