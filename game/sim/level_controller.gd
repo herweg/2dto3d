@@ -16,7 +16,9 @@ const LEVEL_DEF := preload("res://data/level_01.tres")
 ## verificación de la Causa 2 de fase2-benchmark-conjunto.md sección 11.
 const MAX_ENEMIES := 2500
 const MAX_PROJ := 4000
-const MAX_TOWERS := 64
+## Subido de 64 a 150 (09-ago) — pantalla de estrés "última instancia del
+## juego" (pedido del usuario, ~100 torretas reales), ver _setup_stress_test().
+const MAX_TOWERS := 150
 
 const STRESS_SPAWN_PER_FRAME := 40
 const STRESS_TOWER_SPACING := 70.0
@@ -241,28 +243,39 @@ func _parse_cli_args() -> void:
 		_enable_stress_textures()
 
 ## Coloca las torres pegadas al borde del carril (mismo x=30 que ya probó
-## `_place_all_types_test()` con muertes reales, no el x=60+ de la grilla
-## vieja) — corregido 09-ago: la grilla original barría toda la zona
-## construible hacia la derecha (hasta x=410+), muy lejos del carril real
-## (los enemigos caminan pegados a `waypoints`, no por todo `path_rects`) —
-## con `real-stats` activo eso daba 24 torres colocadas pero 0 proyectiles
-## y 0 muertes en 15s, el rango real (170-260px) nunca llegaba. Dos
-## columnas cerca del borde (x=30/100, 70px de separación, mismo
-## STRESS_TOWER_SPACING) en vez de una sola fila — a una sola columna no
-## entran 24 torres con `TOWER_MIN_SPACING=48` en los 640px de alto del
-## carril (640/23≈28px < 48). Arranca el logger — el spawner de enemigos
-## se resuelve en _process() vía _stress_top_up_enemies().
+## `_place_all_types_test()` con muertes reales) — corregido 09-ago: la
+## grilla original barría toda la zona construible hacia la derecha (hasta
+## x=410+), muy lejos del carril real (los enemigos caminan pegados a
+## `waypoints`, no por todo `path_rects`) — con `real-stats` activo eso daba
+## torres colocadas pero 0 proyectiles, el rango real (170-260px) nunca
+## llegaba.
+##
+## Generalizado 09-ago para ~100 torres ("última instancia del juego",
+## pedido del usuario) — `TOWER_MIN_SPACING` (48, no `STRESS_TOWER_SPACING`
+## de 70) en las dos direcciones, tantas columnas como hagan falta para
+## acomodar `_stress_towers` en las ~14 filas que entran en los 640px de
+## alto del carril. Con esto las columnas más lejanas (~x≥270) quedan fuera
+## del rango real de cualquier tipo (máximo 260, riel/homing) — a propósito,
+## no es un error: una base de 100 torres reales tampoco tendría el 100%
+## siempre en rango del mismo tramo de carril, y aun así entre 5-6 columnas
+## sí quedan dentro de rango de sobra para sostener población real de
+## proyectiles. Cicla los 8 tipos reales (`TOWER_TYPE_STATS.size()`), no
+## solo los 4 originales — "torres de diferentes tipos", pedido explícito.
+## Arranca el logger — el spawner de enemigos se resuelve en _process() vía
+## _stress_top_up_enemies().
 func _setup_stress_test() -> void:
-	var col_count := 2
-	var per_col := ceili(float(_stress_towers) / float(col_count))
-	var y_step := 640.0 / maxf(1.0, float(per_col - 1))
+	var row_spacing := TOWER_MIN_SPACING
+	var rows := int(640.0 / row_spacing) + 1
+	var col_count := ceili(float(_stress_towers) / float(rows))
+	var num_types := TowerStore.TOWER_TYPE_STATS.size()
 	var placed := 0
 	for col in col_count:
-		var x := 30.0 + col * STRESS_TOWER_SPACING
-		for i in per_col:
+		var x := 30.0 + col * TOWER_MIN_SPACING
+		for r in rows:
 			if placed >= _stress_towers:
 				break
-			if _place_tower(Vector2(x, -320.0 + i * y_step), placed % 4):
+			var y := -320.0 + r * row_spacing
+			if _place_tower(Vector2(x, y), placed % num_types):
 				placed += 1
 
 	var out_path := "res://benchmark_results/level1_stress_%d.csv" % Time.get_unix_time_from_system()

@@ -892,6 +892,110 @@ acá — dato de aislamiento nada más, tal como se pidió.
 
 ---
 
+## 15. Pantalla de estrés realista — "última instancia del juego" (09-ago, pedido del usuario)
+
+Reemplaza el enfoque de las secciones 13-14 (24 torres, rango ilimitado,
+cadencia patológica) por uno que evita a propósito las dos condiciones que
+el director señaló como no representativas: **~100 torres, rango real
+(`real-stats`), cadencia rápida pero respetando el límite real de un
+disparo por torre por tick** (no el `DEV_FIRE_RATE_OVERRIDE` de 0.004s de
+las secciones 13-14, ~150-400× la cadencia real). Objetivo: ≥500
+proyectiles vivos, 2.400 enemigos, torres de tipos distintos.
+
+### Dos cambios de motor, los dos necesarios para que la escena sea físicamente posible
+
+1. **`MAX_TOWERS` 64→150.** No soportaba ni 100 torres antes de hoy.
+2. **`_setup_stress_test()` generalizada.** La versión de la sección 12
+   (2 columnas fijas) era para 24 torres. Reescrita a grilla densa —
+   tantas columnas como hagan falta a `TOWER_MIN_SPACING` (48, no los 70
+   de `STRESS_TOWER_SPACING`) en ambos ejes, ciclando los 8 tipos reales
+   de `TOWER_TYPE_STATS` (antes solo 4). Confirmado visualmente
+   (`level1_screenshot_t14.png` de esta sección): 8 colores distintos en
+   la grilla de torres.
+
+### Hallazgo geométrico, antes de medir nada: la mayoría de las 100 no entran en rango real
+
+Con rango real (170-260px según tipo) y el carril a ~40-70px del borde de
+la zona construible, solo las **primeras 3 columnas** (x=30/78/126)
+quedan dentro del rango de los 5 tipos que viajan (recto/homing/
+perforante/splash/misil) — más allá de eso, ni el tipo de rango más largo
+(riel/homing, 260px) llega. De las 8 columnas necesarias para acomodar
+100 torres, **5 quedan estructuralmente fuera de alcance** — no es un
+bug, es la geometría real de este nivel: un carril angosto no puede tener
+100 torres reales apuntándole a la vez, igual que no podría en el juego
+jugable de verdad con este mismo `LevelDef`. Confirmado visualmente en la
+captura — las columnas de la derecha no tienen ninguna traza de
+proyectil saliendo.
+
+### Sintonía de cadencia — el límite de "un disparo por tick" es real, y limita cuánto se puede pedir
+
+Con rango real y ~35-40 torres efectivamente en alcance, `stress-fire-rate`
+(que ahora sí respeta el patrón normal de disparo — no el bug de ráfaga de
+la sección 13, ya corregido) determina cuántos proyectiles se sostienen:
+
+| `stress-fire-rate` | proj_count sostenido | delta de frame vs. cadencia |
+|---|---|---|
+| 0.03s | ~430-450 | cadencia > delta — un disparo por tick limpio, sin ambigüedad |
+| 0.025s | ~460 | similar |
+| 0.02s | ~580-690 | cadencia ≈ 0.02s vs. delta ≈ 0.022-0.026s a este fps — **al límite**, algún tick ocasional puede completar un segundo disparo si el cooldown quedó apenas negativo, no una ráfaga como la de la sección 13 (esa era 3-8× peor) |
+
+**No hay un valor que garantice "≥500 proyectiles" y "estrictamente un
+disparo por tick" al mismo tiempo con esta geometría** — 0.03s (limpio)
+se queda corto (~430-450); 0.02s (que sí llega a ≥500) roza el límite del
+tick en vez de quedar cómodamente arriba. Se eligió **0.02s** para cumplir
+el objetivo numérico pedido, documentando el trade-off en vez de
+ocultarlo — es un roce ocasional, no la explosión de la sección 13.
+
+### Resultado final — `stress-fire-rate=0.02`, ventana, Vulkan real, backend nativo (default)
+
+**100 torres (8 tipos), rango real, 2.400 enemigos, 636 proyectiles vivos
+al final (pico observado ~790):**
+
+| Métrica | Valor |
+|---|---|
+| Piso | 34.1fps |
+| Techo | 144.5fps |
+| Promedio | 43.3fps |
+| Muestras bajo 60fps | 52/55 |
+
+**No pasa 60fps — ni cerca, con rango real y cadencia dentro del límite
+de un disparo por tick.** A diferencia de las secciones 13-14 (rango
+ilimitado + cadencia patológica, que el director correctamente identificó
+como no representativas), esta corrida evita las dos condiciones
+extremas y el resultado sigue siendo bajo. Punto de comparación limpio
+(cadencia estrictamente conservadora, `stress-fire-rate=0.03`, ~430-450
+proyectiles): piso 38.0fps, promedio 47.75fps — tampoco pasa 60, con
+menos proyectiles todavía.
+
+### Qué es esto y qué no es
+
+**Esto no responde "¿el juego real genera 500+ proyectiles alguna vez?"**
+— sigue siendo una cadencia forzada (`stress-fire-rate`), no el
+`fire_rate` de `TOWER_TYPE_STATS` sin tocar (0.6-1.6s, sin ningún
+override, probablemente nunca sostiene ni 100 proyectiles con 100
+torres). Esa pregunta sigue siendo de diseño/calibración de combate,
+exactamente como dijo el director. **Lo que esto sí muestra:** si Fase 3
+calibra el juego hacia una composición de 80-100+ torres con cadencia
+alta (una progresión de "base bien defendida" es un objetivo de diseño
+plausible, no exótico), el motor tal como está hoy — incluso con backend
+nativo, incluso con rango real, incluso sin la cadencia patológica — no
+sostiene 60fps. La causa ya está diagnosticada en la sección 14
+(`_find_nearest_enemy()` brute-force): esta sección no la vuelve a medir,
+la sitúa contra un escenario que un jugador real podría llegar a
+producir, no contra un extremo sintético.
+
+**No decido nada de Fase 3 ni de la pregunta del hash acá** — dato
+adicional para cuando la calibración de combate se acerque a esta
+composición, tal como pidió el director en su última respuesta ("si la
+calibración de combate de Fase 3 acerca la composición real a este
+volumen, se vuelve a medir bajo esas condiciones antes de decidir").
+
+**Regresión:** `place-all-towers real-stats` y el spawner normal de
+`Level1.tscn`, ambos headless, sin cambios respecto al número estable de
+siempre.
+
+---
+
 **Herramientas nuevas en `level_controller.gd`**, quedan disponibles para
 la próxima vez que haga falta verificar algo en esta pantalla sin pasar por
 `stress_main.gd`: `place-all-towers` (los 8 tipos, uno de cada), `place-types=<csv>`

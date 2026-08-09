@@ -350,6 +350,55 @@ motor tenga que resolver.
    > Con esto, la condición de arranque de contenido queda resuelta: (a)
    > hecho, (b) evaluado y conscientemente no accionado todavía. Nada
    > bloquea que Fase 3 arranque, calibración de combate incluida.
+   >
+   > **Mesa de Developers, 09-ago — pedido del usuario: pantalla de estrés
+   > "última instancia del juego", evitando a propósito rango ilimitado y
+   > cadencia patológica.** Detalle completo en `fase2-benchmark-conjunto.md`
+   > sección 15. ~100 torres reales (8 tipos), `real-stats` (rango real
+   > 170-260px, no `DEV_RANGE_OVERRIDE`), cadencia dentro del límite real de
+   > un disparo por tick (`stress-fire-rate=0.02`, con el trade-off anotado
+   > explícitamente — no la ráfaga patológica de la sección 13). Resultado:
+   > **piso 34.1fps, 52/55 muestras bajo 60** — con un punto de control aún
+   > más limpio (`stress-fire-rate=0.03`, sin ambigüedad de tick): piso
+   > 38.0fps, tampoco pasa. Con las dos condiciones no-representativas ya
+   > afuera, sigue sin sostener el objetivo. No decide nada de Fase 3 ni del
+   > hash — dato adicional, tal como pidió el director la vez pasada.
+   >
+   > **Dirección, 09-ago — esto sí es el gatillo que dejé anotado arriba, y
+   > cambio la decisión.** La vez pasada no construí el hash porque la única
+   > evidencia combinaba dos condiciones patológicas a la vez (rango
+   > ilimitado + cadencia ~150-400× real) y no sabía si algo remotamente
+   > parecido ocurriría en juego real. Esta corrida saca las dos — rango
+   > real, cadencia que respeta el límite físico de un disparo por tick,
+   > incluso un punto de control sin ninguna ambigüedad de timing — y el
+   > resultado sigue siendo el mismo problema. Con eso, "gastar trabajo de
+   > motor contra un escenario que no sé si el juego produce" deja de
+   > aplicar: 100 torres es una composición de progresión tardía plausible
+   > (`fase3-alcance-v1.md` ya deja la cantidad de torretas como eje de
+   > desbloqueo propio, no exótico), no un extremo sintético.
+   >
+   > **Tarjeta para Mesa de Developers — generalizar el patrón de
+   > `_tick_beam()`, no inventar uno nuevo.** `SpatialHash.query_radius()` +
+   > `_nearest_in()` ya existen, ya están probados en producción para la
+   > familia BEAM (`tower_system.gd`, sección 7 de
+   > `fase2-benchmark-conjunto.md`) — es la misma búsqueda de vecino más
+   > cercano que hace falta acá, filtrada por celda en vez de barrer
+   > `enemy_store.active_count` completo. Alcance:
+   > 1. Los 5 tipos que llaman `_find_nearest_enemy()` en el loop principal
+   >    de `tick()` (recto/homing/perforante/splash/misil) — el call site
+   >    que la sección 15 mide.
+   > 2. `_tick_rail()` también la llama — su propio comentario ("no vale la
+   >    pena acotarlo todavía") razonaba sobre frecuencia por-torre
+   >    (RAIL_CHARGE=1.2s), no sobre cantidad de torres — con el mismo
+   >    helper ya construido para el punto 1, extenderlo acá es marginal,
+   >    no una segunda pieza de trabajo.
+   > 3. **Verificación:** re-correr el escenario exacto de la sección 15
+   >    (100 torres, `real-stats`, `stress-fire-rate=0.02` y el punto de
+   >    control 0.03) — objetivo, limpiar 60fps de piso. Más la regresión
+   >    estándar completa (`mode=joint` de `stress_main.gd`, no solo
+   >    `place-all-towers` de esta pantalla) — esto toca `game/sim/
+   >    tower_system.gd`, código compartido por las dos pantallas, no un
+   >    cambio acotado a una sola.
 
 **Fase 2 queda cerrada del lado de motor — los 4 puntos cumplidos (09-ago,
 Dirección), cierre confirmado, no revertido.** Lo que sigue en vuelo (ronda
