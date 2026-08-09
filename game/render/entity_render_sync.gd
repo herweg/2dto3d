@@ -26,6 +26,19 @@ var _anim_interval: float = 0.2
 var _anim_timer: float = 0.0
 var _anim_frame: int = 0
 
+## Bug de orientación (09-ago, encontrado con el primer sprite asimétrico
+## real — con los cuadrados/círculos de color plano de siempre era invisible,
+## una figura simétrica dada vuelta en Y se ve idéntica). Confirmado con un
+## barrido crudo de las 4 combinaciones de signo (xx,yy) contra un Sprite2D
+## de referencia: (xx=1, yy=-1) es la única que coincide — es un flip de Y
+## solo (Godot 2D es Y-abajo, QuadMesh asume Y-arriba por default), no una
+## rotación de 180° como parecía a primera vista con solo dos muestras.
+## `_flip_h` es aparte, mirror horizontal real cuando haga falta (torres
+## apuntando a la derecha con arte que viene preparado apuntando a la
+## izquierda — ver set_flip_h()).
+const _ORIENT_FIX_Y := -1.0
+var _flip_h: bool = false
+
 func _init(p_capacity: int, quad_size: float, color: Color) -> void:
 	_capacity = p_capacity
 
@@ -87,23 +100,35 @@ func advance_animation(delta: float) -> void:
 		_anim_frame = 1 - _anim_frame
 		_mmi.texture = _walk_tex if _anim_frame == 1 else _idle_tex
 
+## Mirror horizontal (eje X local) — para cuando el arte viene preparado
+## apuntando en una sola dirección por convención (izquierda, ver
+## docs/smoke-test-motor-arte-v1.md) y hace falta mostrarlo apuntando al
+## revés (ej. una torre orientándose hacia la derecha del carril). Estático
+## por store por ahora, no por instancia — alcanza hasta que exista el
+## click-and-drag de apuntado; ese caso sí va a necesitar flip por instancia,
+## no todavía.
+func set_flip_h(flip: bool) -> void:
+	_flip_h = flip
+
 ## Empaqueta positions[0..count) (+ color por type_ids, si se llamó
 ## set_type_colors) en el buffer plano y hace una sola escritura a
-## RenderingServer. Sin rotación/escala por ahora.
+## RenderingServer. Sin rotación por instancia todavía — _ORIENT_FIX/_flip_h
+## son un ajuste de orientación fijo por store, no una escala/rotación real.
 func sync(positions: PackedVector2Array, count: int, type_ids: PackedInt32Array = PackedInt32Array()) -> void:
 	if count > _capacity:
 		count = _capacity
 	var has_colors := _type_colors.size() > 0
+	var xx := -1.0 if _flip_h else 1.0
 
 	for i in count:
 		var p := positions[i]
 		var o := i * _stride
-		_buffer[o] = 1.0
+		_buffer[o] = xx
 		_buffer[o + 1] = 0.0
 		_buffer[o + 2] = 0.0
 		_buffer[o + 3] = p.x
 		_buffer[o + 4] = 0.0
-		_buffer[o + 5] = 1.0
+		_buffer[o + 5] = _ORIENT_FIX_Y
 		_buffer[o + 6] = 0.0
 		_buffer[o + 7] = p.y
 		if has_colors:

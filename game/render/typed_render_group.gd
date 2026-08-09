@@ -33,6 +33,14 @@ func add_all_to(parent: Node) -> void:
 func set_sprite_for_type(type_id: int, idle: Texture2D, walk: Texture2D, interval: float = 0.2) -> void:
 	_stores[type_id].set_sprite(idle, walk, interval)
 
+## Mirror horizontal de un type_id — ver EntityRenderSync.set_flip_h(). Uso
+## previsto: arte que viene preparado apuntando a la izquierda por
+## convención, mostrado apuntando a la derecha sin pedir una segunda
+## imagen. Estático por tipo, no por instancia — el click-and-drag de
+## apuntado (futuro) va a necesitar flip por instancia, distinto de esto.
+func set_flip_h_for_type(type_id: int, flip: bool) -> void:
+	_stores[type_id].set_flip_h(flip)
+
 ## Particiona positions[0..count) por type_ids[i] y hace un sync() por
 ## sub-store. Asigna un PackedVector2Array por frame por type_id presente —
 ## a diferencia del hash espacial (docs/fase2-benchmark-conjunto.md), acá

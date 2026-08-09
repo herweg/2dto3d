@@ -139,6 +139,22 @@ func _parse_cli_args() -> void:
 					# compitiendo por los mismos enemigos, mismo criterio que
 					# el aislamiento por variable de fase2-benchmark-conjunto.md.
 					_place_types_test(parts[1])
+				"sprite-test":
+					# Smoke test de integración (docs/smoke-test-motor-arte-v1.md):
+					# asigna la textura real al tipo 0 (Torreta Recta) en el
+					# TypedRenderGroup real de esta pantalla — mismo quad de
+					# 26px que usa el juego, no el de 16px del arnés sintético.
+					# Coloca una torre tipo 0 (con sprite) y una tipo 1 (sigue
+					# en color plano) juntas, como piso de comparación de tamaño.
+					_run_sprite_test(parts[1])
+				"orientation-test":
+					# Diagnóstico puntual (09-ago): ¿el MultiMesh de
+					# EntityRenderSync orienta distinto que un Sprite2D común?
+					# Sprite2D es la referencia de verdad — 2D nativo, sin el
+					# QuadMesh que usa TypedRenderGroup por debajo. Mismo
+					# tamaño grande para los dos, para poder comparar a ojo
+					# sin depender de una captura de 26px.
+					_run_orientation_test(parts[1])
 
 	if _stress_test:
 		_setup_stress_test()
@@ -192,6 +208,40 @@ func _place_types(types: Array) -> void:
 	var y_step := 640.0 / maxf(1.0, float(types.size() - 1))
 	for i in types.size():
 		_place_tower(Vector2(30.0, y_start + i * y_step), types[i])
+
+func _run_orientation_test(tex_path: String) -> void:
+	var tex: Texture2D = load(tex_path)
+	if tex == null:
+		push_error("[level1] orientation-test: no se pudo cargar " + tex_path)
+		return
+	var target_w := 190.0  # ancho visible aprox., para poder juzgar a ojo
+
+	var sprite := Sprite2D.new()
+	sprite.texture = tex
+	var s := target_w / tex.get_width()
+	sprite.scale = Vector2(s, s)
+	sprite.position = Vector2(-140.0, 0.0)
+	add_child(sprite)
+
+	var diag := EntityRenderSync.new(1, target_w, Color.WHITE)
+	diag.set_sprite(tex, tex)
+	add_child(diag.get_node2d())
+	diag.sync(PackedVector2Array([Vector2(140.0, 0.0)]), 1)
+
+	var diag_flip := EntityRenderSync.new(1, target_w, Color.WHITE)
+	diag_flip.set_sprite(tex, tex)
+	diag_flip.set_flip_h(true)
+	add_child(diag_flip.get_node2d())
+	diag_flip.sync(PackedVector2Array([Vector2(380.0, 0.0)]), 1)
+
+func _run_sprite_test(tex_path: String) -> void:
+	var tex := load(tex_path)
+	if tex == null:
+		push_error("[level1] sprite-test: no se pudo cargar " + tex_path)
+		return
+	_tower_render.set_sprite_for_type(0, tex, tex)  # sin frame de caminar — mismo tex en los dos, cero animación
+	_place_tower(Vector2(120.0, 0.0), 0)  # con sprite
+	_place_tower(Vector2(200.0, 0.0), 1)  # color plano, piso de comparación de tamaño
 
 func _place_tower(pos: Vector2, tower_type: int = -1) -> bool:
 	if tower_type == -1:
