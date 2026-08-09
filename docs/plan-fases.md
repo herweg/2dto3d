@@ -217,16 +217,104 @@ motor tenga que resolver.
    > las dos veces la investigación resolvió la duda de verdad en vez de
    > taparla — esa es la disciplina que este documento existe para proteger.
    > Punto 4: **hecho.**
+   >
+   > **Mesa de Developers, 09-ago — información nueva, posterior al cierre,
+   > no una reapertura de la sección 12.** Pedido del usuario: repetir la
+   > corrida de la sección 12 con textura real en los 3 grupos (torres,
+   > enemigos, fondo — no solo torres) y forzando `proj_count` al objetivo
+   > real (~3.600), que la sección 12 nunca empujó. Detalle completo en
+   > `fase2-benchmark-conjunto.md` sección 13. Dos hallazgos:
+   >
+   > 1. Encontré y corregí un bug real en `TowerSystem.tick()` en el camino
+   >    (necesario para poder forzar la cadencia lo suficiente) — expuesto
+   >    por la regresión de siempre, no a ojo: `place-all-towers real-stats`
+   >    pasó de 6 a 120 proyectiles activos sin que el cambio debiera
+   >    tocar ese caso. Corregido, reconfirmado en 6.
+   > 2. **`level_controller.gd` nunca usó el backend nativo** —
+   >    `_proj_system.tick()` (GDScript), nunca `tick_native()`
+   >    (`SimHotPath`), a diferencia de `stress_main.gd` desde el principio
+   >    de este documento. Nunca se notó porque ningún test en esta pantalla
+   >    había sostenido suficientes proyectiles reales para que importe
+   >    (sección 12: máximo ~17). A población moderada (~500 proyectiles,
+   >    ya bien por encima de cualquier cadencia de diseño real): GDScript
+   >    da piso 43.1fps/44 de 53 muestras bajo 60; con `backend=native`
+   >    (agregado como flag, sin cambiar el default) piso 52.4-55.2fps/1-2
+   >    de 73-74 bajo 60. La diferencia es varias veces mayor que cualquier
+   >    costo de textura medido hasta ahora.
+   >
+   > No reabro el punto 4 — la pregunta que cerraba (¿aparece el dip
+   > periódico en producción?) sigue resuelta, y esto es un eje de costo
+   > distinto (backend de colisión, no textura ni población sintética). Pero
+   > es información real sobre la pantalla que Fase 2 dio por cerrada, así
+   > que la dejo escrita en vez de guardármela. Dos preguntas abiertas, sin
+   > decidir yo: ¿pasa `Level1.tscn` a `backend=native` por default?
+   > ¿`_find_nearest_enemy()` necesita dejar de ser brute-force para las 20
+   > torretas reales del catálogo, o alcanza con que solo BEAM/RAIL usen el
+   > hash (rango acotado) como hoy?
+   >
+   > **Dirección, 09-ago.** Acepto el encuadre — el punto 4 en sí no se
+   > reabre, la pregunta que cerraba sigue contestada. Pero tengo que
+   > corregirme algo a mí mismo: cuando cerré el punto 4 cité la sección 12
+   > como validación "con el mismo objetivo ×1.2 que la sección 8" — eso no
+   > era cierto, y no lo sabía en ese momento. La sección 12 nunca pasó de
+   > ~17 proyectiles reales; el techo estructural que lo impedía recién se
+   > encontró hoy. Lo que la sección 12 sí validó (que el dip periódico es
+   > artefacto del arnés) se sostiene igual — pero "la escena real aguanta a
+   > escala real" nunca estuvo probado hasta esta tarjeta, y no debí
+   > describirlo como si lo estuviera. Dejarlo sin corregir sería peor que
+   > el error original.
+   >
+   > **No deshago el cierre de Fase 2.** Los puntos 1-3 no dependen de nada
+   > de esto, y la comparación de costo de textura del punto 4 tampoco — la
+   > arquitectura ya la sostiene (costo por tipo de textura presente, no por
+   > cantidad de instancias, confirmado independientemente en las secciones
+   > 8, 11 y ahora 13). Pero esto **sí es más grande que "una pregunta
+   > distinta"**: es la primera vez que se sabe que la pantalla que
+   > realmente va a jugar el usuario (`run/main_scene` en `project.godot`)
+   > no aguanta el objetivo de escala — con o sin textura, por dos causas
+   > que ni siquiera son la que se estaba buscando. Lo trato como condición
+   > de arranque de contenido real, no como punto 5 de un criterio ya
+   > cerrado:
+   >
+   > **Antes de que Fase 3 calibre ningún número de combate sobre
+   > `Level1.tscn`, esto tiene que estar resuelto — bloquea contenido, no
+   > bloquea diseño/alcance.**
+   > 1. `backend=native` pasa a default en `Level1.tscn` — **sí, decidido.**
+   >    El dato no deja margen de duda (43fps→52-55fps de piso a población
+   >    moderada, ya con muestras bajo 60 en ambos casos, así que ninguno de
+   >    los dos es "opcional"), `stress_main.gd` lo prueba hace rato sin
+   >    problema, y la regresión de hoy ya salió limpia. No hace falta otra
+   >    ronda para esto — ejecútenlo.
+   > 2. `_find_nearest_enemy()` — no decido todavía, pido un solo dato más:
+   >    proj_count real (~3.600) con `backend=native` ya activo, no
+   >    GDScript. Sección 13 mide GDScript a ~3.600 (9-11fps) y nativo solo
+   >    a ~500 (52-55fps) — nunca los dos juntos en el mismo punto. Ese
+   >    número aísla cuánto del catastrófico 9-11fps es backend y cuánto es
+   >    targeting; con eso decido si toca extender el hash a las 20 torretas
+   >    o alcanza con lo que ya cubre BEAM/RAIL.
 
 **Fase 2 queda cerrada del lado de motor — los 4 puntos cumplidos (09-ago,
-Dirección).** Lo que sigue en vuelo (ronda 3 de arte, triage de las 12
-torretas del catálogo sin fila todavía) sigue siendo Fase 4 adelantada, no
-bloqueaba nada de esto. Deuda técnica menor que sigue pendiente sin
-bloquear nada: `TODO` de `DEV_RANGE_OVERRIDE`/`DEV_FIRE_RATE_OVERRIDE` en
-`tower_store.gd` (poner en 0.0 antes de calibrar combate real — tarea de
-Fase 3); el bug de aspecto cuadrado ya no está en esta lista — se corrigió
-en `smoke-test-motor-arte-v1.md` sección 14. **Fase 3 queda habilitada para
-arrancar** — ver abajo.
+Dirección), cierre confirmado, no revertido.** Lo que sigue en vuelo (ronda
+3 de arte, triage de las 12 torretas del catálogo sin fila todavía) sigue
+siendo Fase 4 adelantada, no bloqueaba nada de esto. Deuda técnica menor
+que sigue pendiente sin bloquear nada: `TODO` de
+`DEV_RANGE_OVERRIDE`/`DEV_FIRE_RATE_OVERRIDE` en `tower_store.gd` (poner en
+0.0 antes de calibrar combate real — tarea de Fase 3); el bug de aspecto
+cuadrado ya no está en esta lista — se corrigió en
+`smoke-test-motor-arte-v1.md` sección 14.
+
+**Condición de arranque de contenido, distinta del cierre de arriba
+(Dirección, 09-ago):** `Level1.tscn` — la escena real, no un arnés —
+recién se probó a población real por primera vez hoy (sección 12-13 de
+`fase2-benchmark-conjunto.md`) y no aguantaba el objetivo, por dos causas
+ajenas a las 4 del criterio de cierre (backend de colisión, targeting
+brute-force). `backend=native` ya pasa a default (decidido arriba); falta
+el dato de `_find_nearest_enemy()` con nativo activo antes de decidir la
+segunda mitad. **Fase 3 puede arrancar en paralelo del lado de diseño/
+alcance** (nada de `fase3-alcance-v1.md` depende de fps) **pero no debería
+calibrar números de combate reales sobre `Level1.tscn` hasta que esto
+cierre** — calibrar HP/daño contra una escena que todavía no sabemos si
+sostiene 60fps sería trabajo a repetir.
 
 ---
 

@@ -50,15 +50,29 @@ func tick(delta: float) -> void:
 			continue
 
 		tower_store.cooldown_left[i] -= delta
-		if tower_store.cooldown_left[i] > 0.0:
-			continue
-
-		var target := _find_nearest_enemy(tower_store.positions[i], tower_store.range[i])
-		if target == -1:
-			continue
-
-		_fire(i, proj_type, target)
-		tower_store.cooldown_left[i] = tower_store.fire_rate[i]
+		# while, no if — a cadencia real (fire_rate ≥ 0.6s, muy por encima de
+		# delta ~0.016s) esto itera una sola vez siempre, cero cambio de
+		# comportamiento. Con DEV_FIRE_RATE_OVERRIDE forzado por debajo de
+		# delta (fase2-benchmark-conjunto.md, prueba de textura+población
+		# real, 09-ago) un `if` tapaba la torre a un disparo por frame sin
+		# importar cuánto se bajara el cooldown.
+		#
+		# Ojo con esto (bug real, encontrado y corregido en el mismo pase):
+		# si no hay blanco, cooldown_left sigue restando `delta` cada frame
+		# sin techo — cuando por fin reaparece un blanco, un `break` sin más
+		# dejaría el déficit acumulado y el while lo descargaría entero de
+		# una ("ráfaga" al reenganchar, no cadencia normal). Por eso el
+		# clamp a 0.0 antes del break: sin blanco, no se banca déficit más
+		# allá de "lista para disparar ya" — un salto de 6→120 proyectiles
+		# en la regresión de place-all-towers real-stats fue lo que lo
+		# expuso (torres con huecos reales de blanco entre spawns).
+		while tower_store.cooldown_left[i] <= 0.0:
+			var target := _find_nearest_enemy(tower_store.positions[i], tower_store.range[i])
+			if target == -1:
+				tower_store.cooldown_left[i] = 0.0
+				break
+			_fire(i, proj_type, target)
+			tower_store.cooldown_left[i] += tower_store.fire_rate[i]
 
 func _fire(i: int, proj_type: int, target: int) -> void:
 	var origin := tower_store.positions[i]

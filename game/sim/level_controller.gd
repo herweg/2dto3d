@@ -81,6 +81,33 @@ var _stress_towers := 30
 var _stress_enemies := 300
 var _stress_logger: BenchmarkLogger = null
 
+## Costo de GPU con textura real en los 3 grupos a la vez (torres, enemigos,
+## fondo) — punto 4 de plan-fases.md ya cerrado con solo torres
+## texturizadas (fase2-benchmark-conjunto.md sección 11); pedido puntual
+## del director para repetirlo con los 3 grupos juntos, en el camino de
+## producción, a la población real. `torreta_recta_v2.png` reusado para
+## torres (ya cuadrado, sección 14 de smoke-test-motor-arte-v1.md),
+## `characters.png` (ya existente, atlas de animación) para enemigos,
+## `torreta_recta_v3_small.png` (105×127, la más chica de las ya
+## recortadas) repetida/tileada para el fondo — no hace falta un asset
+## nuevo para ninguno de los tres.
+var _stress_textures := false
+var _bg_tile := false
+const STRESS_BG_TEX := "res://assets/torreta_recta_v3_small.png"
+
+## Hallazgo real (09-ago, probando textura+población forzada): esta
+## pantalla llama `_proj_system.tick()` (GDScript puro) — nunca usó el
+## hot path de Rust (`SimHotPath`/`tick_native()`) que sí usa
+## `stress_main.gd` desde `fase2-benchmark-conjunto.md` sección 1. Nunca se
+## notó porque ningún test anterior en `Level1.tscn` sostuvo más que un
+## puñado de proyectiles reales (real-stats dispara lento; sección 12 de
+## ese mismo doc nunca pasó de ~17). A ~3.600 proyectiles reales el costo
+## de GDScript puro es catastrófico (~9-10fps, no ~60-115). `backend=native`
+## (mismo nombre que ya usa `stress_main.gd`) lo activa acá también, sin
+## cambiar el default — nadie lo pedía hasta hoy porque nadie había medido
+## esta pantalla a la escala real.
+var _backend_native := false
+
 ## Vida alta (no infinita) solo para el modo de estrés: con 30 torres a
 ## cadencia de DEV_FIRE_RATE_OVERRIDE, la vida normal (ENEMY_HEALTH=20) hace
 ## que mueran más rápido de lo que se pueden acumular — nunca se llega a
@@ -178,9 +205,30 @@ func _parse_cli_args() -> void:
 					# tamaño grande para los dos, para poder comparar a ojo
 					# sin depender de una captura de 26px.
 					_run_orientation_test(parts[1])
+				"stress-fire-rate":
+					# Pisa DEV_FIRE_RATE_OVERRIDE (default 0.06s = ~16.7
+					# disparos/seg) para forzar población de proyectiles más
+					# alta todavía — ver stress-textures=1 más abajo, pedido
+					# puntual para empujar el pico a ~3.600 (mismo objetivo
+					# ×1.2 de siempre) en vez del disparo real lento de
+					# `real-stats` (fase2-benchmark-conjunto.md sección 12,
+					# donde proj_count nunca pasó de ~17).
+					TowerStore.DEV_FIRE_RATE_OVERRIDE = parts[1].to_float()
+				"stress-textures":
+					if parts[1] == "1":
+						_stress_textures = true
+				"backend":
+					if parts[1] == "native":
+						if ClassDB.class_exists("SimHotPath"):
+							_proj_system.native = ClassDB.instantiate("SimHotPath")
+							_backend_native = true
+						else:
+							push_error("[level1] backend=native pedido pero SimHotPath no está registrado")
 
 	if _stress_test:
 		_setup_stress_test()
+	if _stress_textures:
+		_enable_stress_textures()
 
 ## Coloca las torres pegadas al borde del carril (mismo x=30 que ya probó
 ## `_place_all_types_test()` con muertes reales, no el x=60+ de la grilla
@@ -276,6 +324,24 @@ func _run_sprite_test(tex_path: String) -> void:
 	_place_tower(Vector2(120.0, 0.0), 0)  # con sprite
 	_place_tower(Vector2(200.0, 0.0), 1)  # color plano, piso de comparación de tamaño
 
+## Textura real en los 3 grupos de render a la vez — ver declaración de
+## _stress_textures. Se llama después de _setup_stress_test(), así que los
+## sprites quedan asignados antes de que el primer sync() del frame los
+## necesite.
+func _enable_stress_textures() -> void:
+	var tower_tex := load("res://assets/torreta_recta_v2.png")
+	for t in TowerStore.TOWER_TYPE_STATS.size():
+		_tower_render.set_sprite_for_type(t, tower_tex, tower_tex)
+
+	var atlas := SpriteAtlas.new("res://assets/characters.png")
+	var idle := atlas.crop_frame(0, 1)  # fila 1 = goblin, mismo criterio que stress_main.gd SPRITE_ROW
+	var walk := atlas.crop_frame(1, 1)
+	_enemy_render.set_sprite(idle, walk, 0.2)
+
+	var bg_tex := load(STRESS_BG_TEX)
+	_level.background_texture = bg_tex
+	_bg_tile = true
+
 func _place_tower(pos: Vector2, tower_type: int = -1) -> bool:
 	if tower_type == -1:
 		tower_type = _selected_tower_type
@@ -314,7 +380,10 @@ func _process(delta: float) -> void:
 
 	_lane_system.tick(delta)
 	_hash.build(_enemy_store)
-	_proj_system.tick(delta)
+	if _backend_native:
+		_proj_system.tick_native(delta)
+	else:
+		_proj_system.tick(delta)
 	_tower_system.tick(delta)
 	_dot_system.tick(delta)
 
@@ -370,7 +439,7 @@ func _maybe_screenshot() -> void:
 
 func _draw() -> void:
 	if _level.background_texture:
-		draw_texture_rect(_level.background_texture, _level.background_rect, false)
+		draw_texture_rect(_level.background_texture, _level.background_rect, _bg_tile)
 	else:
 		draw_rect(_level.background_rect, _level.background_color)
 	for r in _level.buildable_zones:

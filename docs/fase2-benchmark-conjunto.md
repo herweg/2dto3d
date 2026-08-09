@@ -734,6 +734,114 @@ Causa 1.
 
 Dato completo para Dirección/PM — no cierro el punto 4 ni Fase 2 acá.
 
+## 13. Los 3 grupos con textura real + población forzada al objetivo (09-ago) — hallazgo grande
+
+Pedido del usuario, sobre la sección 12: repetir la corrida de `Level1.tscn`
+pero con **torres, enemigos y fondo** en textura real (no solo torres como
+la sección 11), y forzando `proj_count` al objetivo real (~3.600) — la
+sección 12 nunca lo empujó (`real-stats` dispara lento, `proj_count` no
+pasó de ~17).
+
+### Texturas — sin costo de créditos, assets ya existentes
+
+`stress-textures=1` (nuevo flag, `level_controller.gd`): torres →
+`torreta_recta_v2.png` en los 8 `type_id` vía `TypedRenderGroup` (mismo
+mecanismo de la sección 11); enemigos → `characters.png` (atlas ya
+existente, fila 1) vía `EntityRenderSync.set_sprite()`; fondo →
+`torreta_recta_v3_small.png` (105×127, la muestra más chica ya recortada)
+tileado sobre `background_rect` (`draw_texture_rect(..., tile=true)`, antes
+siempre `false`). Confirmado visualmente — `level1_screenshot_t14.png` de
+esta sección: fondo tileado, enemigos con sprite, torres con sprite, los 3
+grupos a la vez.
+
+### Forzar proj_count al objetivo — dos problemas reales encontrados en el camino, los dos corregidos
+
+**1. Techo estructural de "un disparo por torre por frame".** Ni con
+`DEV_FIRE_RATE_OVERRIDE` en el mínimo pasaba de ~90-124 proyectiles
+concurrentes — `TowerSystem.tick()` usaba `if cooldown_left > 0: continue`,
+así que sin importar cuánto se acelerara la cadencia, cada torre nunca
+disparaba más de una vez por frame (24 torres × fps ≈ el techo real, no la
+cadencia configurada). Corregido a un `while`, para que una torre pueda
+descontar varios disparos en el mismo frame si el cooldown se lo permite —
+a cadencia real (0.6-1.6s, muy por encima de un frame) esto no cambia nada;
+solo importa bajo `DEV_FIRE_RATE_OVERRIDE` forzado.
+
+**2. Bug real introducido por el fix de arriba, encontrado por regresión, no a ojo.**
+El `while` dejaba que `cooldown_left` seguiera restando sin piso mientras
+no hubiera blanco — al reaparecer un enemigo, la torre descargaba **todo**
+el déficit acumulado de una vez (ráfaga), no un disparo normal. Lo expuso
+la regresión de siempre (`place-all-towers real-stats`): pasó de
+`proyectiles activos: 6` (el número estable de toda la sesión) a `120` sin
+que nada del cambio debiera tocar ese escenario. Aislado revirtiendo
+temporalmente a `if` (volvió a dar 6, confirmando la causa) y corregido con
+un clamp: sin blanco, `cooldown_left` se fija en `0.0` en vez de seguir
+negativo — listo para disparar apenas reaparezca un blanco, pero solo una
+vez, no en ráfaga. Reconfirmado: `place-all-towers real-stats` → 6 de
+nuevo; el escenario de estrés sigue alcanzando volumen alto sin cambios.
+Mismo criterio que ya vale para todo este documento: un número que cambia
+sin que el cambio debiera tocarlo se investiga, no se acepta.
+
+### Hallazgo grande, no buscado: `Level1.tscn` nunca usó el backend nativo
+
+Con los dos fixes de arriba, empujar `proj_count` cerca de 3.600 (real,
+via disparo genuino, no inyección sintética) dio **~9-11fps** — catastrófico,
+nada que ver con los 55-115fps de las secciones 11-12. Antes de reportarlo
+como "las texturas cuestan carísimo", revisé qué backend usa esta pantalla:
+**`level_controller.gd` llama `_proj_system.tick()` (GDScript puro) — nunca
+`tick_native()`** (el hot path de Rust, `SimHotPath`, que `stress_main.gd`
+usa desde `fase2-benchmark-conjunto.md` sección 1). Nunca se notó porque
+ningún test anterior en esta pantalla sostuvo más que un puñado de
+proyectiles reales (sección 12: máximo ~17).
+
+Agregado `backend=native` (mismo nombre que ya usa `stress_main.gd`) —
+opcional, sin cambiar el default. Con él activo, a población moderada
+(~500-555 proyectiles, ya muy por encima de cualquier cadencia real de
+diseño) la diferencia es enorme:
+
+| Config | proj_count | Piso | Promedio | Muestras bajo 60 |
+|---|---|---|---|---|
+| GDScript (`tick()`, default actual) | 491 | 43.1 | 56.08 | 44/53 |
+| Nativo (`tick_native()`, `backend=native`) | 555 | 52.4 | 75.11 | 1/73 |
+
+**Pero el backend nativo por sí solo no alcanza para llegar limpio a
+~3.600.** A ese volumen, con backend nativo activo, el piso sigue en
+~7-11fps. Diagnóstico: no es el mismo cuello de botella que resuelve
+`SimHotPath` (colisión proyectil-enemigo) — es `_find_nearest_enemy()`
+(`tower_system.gd`), brute-force O(enemigos activos) por disparo, ya
+señalado como tal en el propio comentario del archivo ("pocas torres,
+dispara poco seguido, no hace falta más"). Alcanzar ~3.600 proyectiles con
+solo 24 torres genuinas exige muchos disparos por torre por frame — cada
+uno relanza esa búsqueda de 2.400 enemigos. `SimHotPath` no toca esa
+función; acelerar la colisión no ayuda si el cuello de botella está en
+elegir a quién dispararle. Distinto (y no cubierto) por el benchmark de
+targeting de la sección 10, que medía a cadencia fija de 20/seg, nunca en
+régimen de "muchos disparos por torre por frame".
+
+**No es la misma pregunta que "cuesta la textura"** — es un hallazgo de
+motor aparte, más grande. Con población moderada y backend nativo (tabla de
+arriba), el costo de las texturas ya no domina la lectura: la diferencia
+GDScript-vs-nativo (43→75fps de piso) es varias veces mayor que cualquier
+costo de textura medido hasta ahora (secciones 11-12).
+
+### Qué no resuelvo acá
+
+No cambio el default de `level_controller.gd` a `backend=native` — es una
+pantalla de producción real, ese cambio necesita su propia verificación
+(regresión ya corrida y limpia acá, pero la decisión de adoptarlo como
+default no me corresponde tomarla sola). No toco `_find_nearest_enemy()`
+para acelerarlo con el hash espacial — a rango ilimitado (como usa este
+mismo test) el hash no ayuda tanto como con rango acotado (ver
+`_tick_beam()`, que sí filtra por hash porque su rango es finito); sería
+una función distinta de la que ya existe, no un ajuste chico.
+
+**Dato completo para Dirección/PM** — no cierro nada acá. Dos preguntas
+abiertas concretas: (a) ¿pasar `Level1.tscn` a `backend=native` por
+default, ahora que se sabe que la diferencia es grande incluso a población
+moderada? (b) ¿vale la pena que `_find_nearest_enemy()` dependa del hash
+espacial para las 20 torretas reales del catálogo, o alcanza con que las
+familias BEAM/RAIL (las únicas con rango acotado hoy) sigan siendo las
+únicas que lo usan?
+
 ---
 
 **Herramientas nuevas en `level_controller.gd`**, quedan disponibles para
