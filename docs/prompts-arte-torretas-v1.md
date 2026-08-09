@@ -26,23 +26,40 @@ presupuesto en la capa "máxima" (`docs/fase2-vfx-benchmark.md`).
 
 ## A. Preámbulo de estilo — pegar antes de cada prompt de torreta/VFX (sección B)
 
+**Revisado 09-ago, tras el smoke test (`docs/smoke-test-motor-arte-v1.md`
+secciones 7-8, veredicto "no pasa").** La versión anterior pedía "bold,
+clean dark outlines (consistent line weight)" — eso, no solo la falta de
+anclaje flat, es lo que causó el fallo #2 (color de firma: a 26px el negro
+del line-art dominaba sobre el gris acero del cuerpo). El ajuste de ronda 3
+que había quedado pendiente en `qa-prueba-assets-v1.md` sección 5 punto 2
+(flat fills, sin gradiente/AO/especular/bisel/desgaste) está fusionado acá
+directo en el preámbulo — aplica a las 20 torretas, no solo a la que falló
+el test, así que se corrige una vez acá en vez de pegarse aparte en cada
+prompt de acá en más.
+
 ```
-2D game asset, flat vector illustration style with bold, clean dark outlines
-(consistent line weight), 2-3 tone flat cel-shading — NOT painterly, NOT
-photorealistic, NOT a brush/canvas texture. Strong, simple, instantly
-readable silhouette designed to read clearly at very small on-screen size
-(roughly 20-40px tall in the final game). Elevated 3/4 side view (not
-top-down, not full side profile), static neutral pose, no implied walking
-or facing direction. A stationary ground-mounted weapon emplacement bolted
-to its base, like a fixed artillery/gun turret — NOT a robot, NOT bipedal,
-NOT a humanoid mech or character, no legs, no arms, no face. Soft single
-top-left light source, minimal shading, no heavy ambient occlusion. Rugged
-industrial sci-fi frontier-outpost material language: worn rusted metal,
-riveted armor plating, weathered dark surfaces, exposed rivets and panel
-seams — NOT clean/pristine sci-fi, NOT organic or biological. Transparent
-background (PNG alpha). No ground shadow baked in, no text, no watermark,
-no UI, no frame or border. Square canvas, subject centered, filling about
-70-75% of frame height.
+2D game asset, flat vector illustration / sticker-icon style — solid flat
+color fills only, no shading gradients, no ambient occlusion, no specular
+highlights, no drop shadow, no bevel, no weathering or grunge texture
+noise. Think flat mobile-game icon, not a rendered 3D asset. Thin, minimal
+outline only where needed to separate the silhouette from the background —
+the outline must be visually secondary to the fill: never heavier or
+darker-and-thicker than the flat fill color, because the fill color (not
+the outline) is what has to read as the turret's signature color at a
+glance. 2-3 flat color tones maximum. Strong, simple, instantly readable
+silhouette designed to read clearly at very small on-screen size (roughly
+20-40px tall in the final game — the real in-game render is 26px).
+Elevated 3/4 side view (not top-down, not full side profile), static
+neutral pose, no implied walking or facing direction. A stationary
+ground-mounted weapon emplacement bolted to its base, like a fixed
+artillery/gun turret — NOT a robot, NOT bipedal, NOT a humanoid mech or
+character, no legs, no arms, no face. Rugged industrial sci-fi
+frontier-outpost material language: worn rusted metal, riveted armor
+plating, weathered dark surfaces, exposed rivets and panel seams — NOT
+clean/pristine sci-fi, NOT organic or biological. Transparent background
+(PNG alpha). No ground shadow baked in, no text, no watermark, no UI, no
+frame or border. Square canvas, subject centered, filling about 70-75% of
+frame height.
 ```
 
 **Agregar además en los prompts de proyectil/impacto base y medio

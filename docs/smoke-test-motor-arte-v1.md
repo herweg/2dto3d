@@ -263,3 +263,35 @@ ve el juego **hoy, con la configuración real**, que es la pregunta que
 hizo la PM. Si la ronda 3 no alcanza, generar mipmaps es la siguiente
 palanca de motor a probar antes de pedir una ronda 4 — más barato que otra
 tanda de créditos de generación.
+
+## 10. Próximos pasos (coordinador, 09-ago)
+
+**Causa adicional del fallo #2, encontrada al preparar la ronda 3.** El
+preámbulo compartido (`prompts-arte-torretas-v1.md` sección A) pedía "bold,
+clean dark outlines" — eso, no solo la falta de anclaje flat, es lo que
+enterró el gris acero bajo el line-art a 26px. Corregido directo en el
+preámbulo (afecta las 20 torretas, no solo esta), fusionado con el ajuste
+de `qa-prueba-assets-v1.md` sección 5 punto 2 en un solo bloque — no hace
+falta pegar dos textos separados en la ronda 3.
+
+**Tarjeta — Arte.** Ronda 3 de Torreta Recta (cuerpo) con el preámbulo ya
+corregido, un solo paste. Si pasa: mismo preámbulo para el resto del
+catálogo de 20. Si vuelve a fallar el color de firma puntualmente (no la
+silueta ni el detalle pintado), el problema no es de prompt — es de
+herramienta o de que el color de firma en sí (blanco/gris claro) tiene poco
+contraste inherente contra outline+sombra a esta escala, y ahí sí
+ameritaría replantear el criterio de color por torreta, no otra vuelta de
+prompt.
+
+**Tarjeta — Motor/Mesa de Developers.** En paralelo, no bloquea ni depende
+de la ronda 3: probar `mipmaps/generate=true` en
+`game/assets/torreta_recta_v2.png.import` sobre el asset ya recortado y
+repetir la misma captura 1:1 a 26px (mismos pasos de la sección 3, mismo
+asset, sin gastar créditos de Arte). Aísla cuánto de los fallos #1/#3
+originales era aliasing de downscale (~36×, sección 9) contra contenido
+real del arte — dato útil independiente del resultado de la ronda 3, y más
+barato correrlo ahora que como palanca de emergencia después de una ronda 4.
+
+**No hay decisión de Director/PM pendiente acá** — ambas tarjetas son
+independientes entre sí y de bajo costo; correrlas en paralelo es el default
+razonable, no algo que necesite aprobación aparte.
