@@ -377,7 +377,7 @@ func _ensure_towers_normales(target: int) -> void:
 		var col := idx % 40
 		var row := idx / 40
 		var pos := Vector2(-620.0 + col * 26.0, -350.0 + row * 26.0)
-		if _tower_store.spawn_typed(pos, idx % VFX_SCALE_TOWER_TYPES) == -1:
+		if _tower_store.spawn_typed(pos, idx % VFX_SCALE_TOWER_TYPES, _fixed_dir_for(pos)) == -1:
 			break
 		spawned += 1
 
@@ -633,6 +633,16 @@ func _top_up_zones() -> void:
 			break
 		spawned += 1
 
+## Mismo criterio que level_controller.gd::_place_tower() (09-ago,
+## plan-fases.md) — sin esto, las filas con uses_targeting=false (recto/
+## perforante/splash) spawnearían con fixed_dir=ZERO por default, es decir
+## proyectiles con velocidad cero, inmóviles. Habría roto en silencio todo
+## número de proj_count/fps ya medido con mode=joint desde hace varias
+## secciones — se aplica acá también, no solo en la pantalla jugable.
+func _fixed_dir_for(pos: Vector2) -> Vector2:
+	var dir := (_level.nearest_point_on_path(pos) - pos).normalized()
+	return dir if not dir.is_zero_approx() else Vector2.LEFT
+
 func _ensure_towers(target: int, cycle_types: bool = false) -> void:
 	var spawned := 0
 	while _tower_store.active_count < target and spawned < MAX_SPAWN_PER_FRAME:
@@ -641,7 +651,7 @@ func _ensure_towers(target: int, cycle_types: bool = false) -> void:
 		var row := idx / 40
 		var pos := Vector2(-620.0 + col * 26.0, -350.0 + row * 26.0)
 		var t := (idx % _tower_cycle_modulo) if cycle_types else _tower_type_arg
-		if _tower_store.spawn_typed(pos, t) == -1:
+		if _tower_store.spawn_typed(pos, t, _fixed_dir_for(pos)) == -1:
 			break
 		spawned += 1
 

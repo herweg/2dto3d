@@ -48,3 +48,22 @@ func is_buildable(pos: Vector2) -> bool:
 		if r.has_point(pos):
 			return true
 	return false
+
+## Punto más cercano de `path_rects` a `pos` — clampea `pos` a cada rect por
+## separado (barato, sin raíz cuadrada) y se queda con el más cercano de los
+## candidatos. Usado para la dirección fija de disparo de las torres sin
+## targeting real (tower_system.gd, plan-fases.md 09-ago) — se llama una
+## sola vez al colocar la torre, no por tick.
+func nearest_point_on_path(pos: Vector2) -> Vector2:
+	var best := Vector2.ZERO
+	var best_dist_sq := INF
+	for r in path_rects:
+		var clamped := Vector2(
+			clampf(pos.x, r.position.x, r.end.x),
+			clampf(pos.y, r.position.y, r.end.y)
+		)
+		var dist_sq := pos.distance_squared_to(clamped)
+		if dist_sq < best_dist_sq:
+			best_dist_sq = dist_sq
+			best = clamped
+	return best

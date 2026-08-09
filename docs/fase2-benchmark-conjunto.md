@@ -996,6 +996,123 @@ siempre.
 
 ---
 
+## 16. Disparo en dirección fija reemplaza el hash — implementado y verificado (09-ago)
+
+Tarjeta de `plan-fases.md` (commit `72335de`, Dirección): reemplazar la
+extensión del hash espacial a `_find_nearest_enemy()` (pausada en la
+sección 14) por eliminar la búsqueda en el origen para la mayoría de las
+torres — mecánica final del catálogo (Fase 3 va a dejar que el jugador
+elija el ángulo al colocar; por ahora, dirección automática hacia el
+carril), no un atajo de rendimiento. Implementado tal cual la
+especificación, con un hallazgo de metodología en el camino.
+
+### Implementación
+
+- **`LevelDef.nearest_point_on_path(pos)`** (nuevo) — punto más cercano de
+  `path_rects` a `pos`, clampeando por rect (barato, sin raíz cuadrada).
+- **`TowerStore`**: `uses_targeting` por fila de `TOWER_TYPE_STATS` —
+  `true` para homing (`_steer_homing()` re-apunta en vuelo) y misil
+  (`set_trajectory()` precalcula Bézier hacia una posición), `false` para
+  recto/perforante/splash (sin mecánica atada al target). Campo nuevo
+  `fixed_dir` (`PackedVector2Array`), calculado una sola vez en
+  `spawn_typed()` — normalizado, con fallback a `Vector2.LEFT` si la
+  posición cae exactamente sobre el punto del carril (no debería pasar en
+  la práctica). `uses_targeting_of(idx)` — helper, default `true` para
+  filas sin la clave (BEAM/RAIL, no la consultan).
+- **`TowerSystem.tick()`** bifurca por `uses_targeting_of(i)`:
+  `_tick_targeted()` (idéntico al `tick()` de antes, solo extraído a
+  función) para homing/misil; `_tick_fixed()` (nuevo) para
+  recto/perforante/splash — mismo `while`/cadencia, pero dispara directo a
+  `fixed_dir` **sin llamar `_find_nearest_enemy()` nunca**, incluso sin
+  nada cerca (mecánica pedida: torres sin target dinámico disparan
+  siempre). BEAM/RAIL sin cambios.
+- Los 3 call sites de `spawn_typed()` (`level_controller.gd::_place_tower()`,
+  `stress_main.gd::_ensure_towers()`/`_ensure_towers_normales()`)
+  actualizados para calcular y pasar `fixed_dir` — sin esto, las filas
+  `uses_targeting=false` spawnearían con dirección cero (proyectiles
+  inmóviles), rompiendo en silencio los números ya medidos de `mode=joint`.
+
+### Hallazgo de metodología, encontrado por regresión (no a ojo)
+
+`place-all-towers real-stats quit-after=8` dio **78 proyectiles activos**
+en la primera corrida post-cambio — muy lejos del 6 estable de toda la
+sesión. Investigado en vez de aceptado: `_parse_cli_args()` procesaba cada
+arg en el orden de la línea de comandos, y `place-all-towers` (coloca
+torres al toque) venía **antes** que `real-stats` (que recién ahí pone
+`DEV_RANGE_OVERRIDE`/`DEV_FIRE_RATE_OVERRIDE` en 0.0) — las torres
+quedaban plantadas con los overrides de dev todavía activos (rango
+ilimitado, cooldown 0.06s). Con targeting dinámico esto pasaba
+desapercibido casi siempre (sin enemigos en rango real hasta que el
+spawner lento los acercara, la torre no disparaba igual); con disparo
+incondicional se nota — confirmado aislando una sola torre recto con el
+orden mal puesto (24 proyectiles) vs. bien puesto (1 proyectil).
+
+**Corregido en la raíz, no solo en cómo se invoca:** `_parse_cli_args()`
+pasa a dos pasadas — ajustes/overrides primero, colocación de torres
+después — así el orden en la línea de comandos deja de importar. Nuevo
+baseline estable de regresión: `place-all-towers real-stats quit-after=8`
+→ `torres: 8, proyectiles activos: 4, enemigos activos: 5, muertes: 2,
+leaks: 0` (reproducido 2 veces, estable) — distinto del 6 anterior porque
+la mecánica cambió de verdad (algunas filas ya no dependen de que haya un
+enemigo cerca), no por ruido.
+
+### Verificación — mismo escenario de la sección 15, con el cambio aplicado
+
+`real-stats stress-fire-rate=<X> stress-test stress-towers=100
+stress-enemies=2400`, ventana, Vulkan real, backend nativo (default):
+
+| `stress-fire-rate` | proj_count final | Piso | Techo | Promedio | Bajo 60fps |
+|---|---|---|---|---|---|
+| 0.03 (single-shot limpio) | 920 | **58.5** | 176.0 | 67.63 | 2/88 |
+| 0.02 (mismo punto de la sección 15) | 1385 | **55.0** | 169.6 | 63.60 | 6/83 |
+
+**Comparado contra la sección 15 (mismos dos puntos, antes del cambio):**
+piso 34.1-38.0fps → **55.0-58.5fps**. Mejora real y grande, en la
+dirección que predijo la tarjeta — pero no un "cero muestras bajo 60"
+perfectamente limpio todavía: quedan 2-6 muestras por corrida, todas entre
+55.0-59.9fps (prácticamente en el borde, no una caída real) y sin
+concentrarse en la rampa inicial — dispersas a lo largo de la corrida,
+lectura consistente con jitter de medición más que con un costo sistemático
+remanente. Capturas de pantalla confirman más columnas de torres
+disparando que en la sección 15 (las que antes quedaban fuera de rango
+real ahora sí tiran, en dirección fija).
+
+**El efecto colateral (torres sin blanco disparando siempre) — medido, no
+asumido, tal como pedía la tarjeta.** proj_count subió de 636→1385 (0.02)
+y 434→920 (0.03) respecto a la sección 15 — las torres antes fuera de
+rango ahora contribuyen población real. **No revive el problema de las
+secciones 13-14**: aquel caso caía a 7-11fps con ~3.600-4.000 proyectiles
+generados por *búsqueda* repetida (`_find_nearest_enemy()` multiplicada
+por disparos/frame); acá el piso sube pese a más proyectiles, porque la
+población nueva no cuesta ninguna búsqueda — exactamente la predicción
+técnica de la tarjeta ("cero costo de targeting en el origen, no una
+versión optimizada de ese costo"), confirmada con el mismo método que
+diagnosticó el problema original.
+
+### Sobre el hash — sigue en pausa, con el dato que pedía la tarjeta
+
+No hace falta implementarlo para que recto/perforante/splash lleguen a
+60fps — ya no llaman `_find_nearest_enemy()` en absoluto. Lo que sí sigue
+sin resolver es el ~10% que se queda con targeting real (homing, misil) —
+a la escala de esta corrida (~20-25 de las 100 torres) no parece ser el
+costo dominante (el piso ya mejoró mucho sin tocarlo), pero no lo aislé
+específicamente esta vez — no hacía falta para responder la pregunta de la
+tarjeta. Riel queda igual de pendiente que antes, sin cambios en esta
+tarjeta.
+
+**No decido si las 2-6 muestras restantes ameritan seguir puliendo** (¿el
+targeting real del 10%? ¿jitter genuino de medición, sin más vuelta?) —
+dato completo para Dirección/PM, mismo criterio de todo este documento.
+
+**Regresión:** `place-all-towers real-stats` (nuevo baseline estable, ver
+arriba), `place-types=1,4` (homing+misil, targeting real sin cambios de
+lógica — solo extraído a función, verificado línea por línea contra el
+código anterior) y `mode=joint proj-type=realistic` de `stress_main.gd`
+(proy≈3407, enem≈2382, torres=24 — dentro del rango histórico
+establecido), todos sin errores.
+
+---
+
 **Herramientas nuevas en `level_controller.gd`**, quedan disponibles para
 la próxima vez que haga falta verificar algo en esta pantalla sin pasar por
 `stress_main.gd`: `place-all-towers` (los 8 tipos, uno de cada), `place-types=<csv>`

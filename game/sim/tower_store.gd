@@ -17,6 +17,12 @@ var damage: PackedFloat32Array
 var proj_extra: PackedFloat32Array
 var dot_linger: PackedFloat32Array
 
+## Dirección de disparo para las filas con `uses_targeting=false` (ver
+## TOWER_TYPE_STATS) — normalizada, calculada una sola vez al colocar la
+## torre (spawn_typed()), no por tick. Sin uso para las filas con targeting
+## real (queda en cero, inofensivo — _fire() de esas filas nunca la lee).
+var fixed_dir: PackedVector2Array
+
 ## type_id → {range, fire_rate, damage, proj_type, proj_extra}. proj_type
 ## usa las constantes PROJ_* de projectile_system.gd (0=recto, 1=homing,
 ## 2=perforante, 3=splash, 4=misil) más dos modos que no spawnean proyectil
@@ -51,12 +57,23 @@ const TOWER_MODE_RAIL := 7  # riel: carga + hitscan instantáneo en línea, sin 
 ## filtra candidatos por `SpatialHash.query_radius()` y aplica el mismo
 ## chequeo de corredor que ya usaba `_tick_rail()` (dot-product + distancia
 ## perpendicular), reevaluado a 8Hz en vez de cada tick.
+## `uses_targeting` (09-ago, plan-fases.md — reemplaza la tarjeta de extender
+## el hash a _find_nearest_enemy(), no la complementa): mecánica final del
+## catálogo, no atajo de rendimiento — la mayoría de las torres disparan en
+## dirección fija (calculada al colocarlas, ver TowerStore.spawn_typed() y
+## LevelDef.nearest_point_on_path()), sin buscar blanco nunca. Homing
+## necesita un blanco real porque _steer_homing() re-apunta en vuelo; misil
+## necesita uno para precalcular la curva de Bézier hacia una posición de
+## impacto (set_trajectory()) — las dos son las únicas filas con mecánica
+## atada al target, quedan en true. Filas sin la clave (BEAM/RAIL) no la
+## consultan — tienen su propio _tick_beam()/_tick_rail(), ninguno de los
+## dos llama _find_nearest_enemy().
 const TOWER_TYPE_STATS := {
-	0: {"range": 220.0, "fire_rate": 0.6, "damage": 6.0, "proj_type": 0, "proj_extra": 0.0},   # recta
-	1: {"range": 260.0, "fire_rate": 1.1, "damage": 5.0, "proj_type": 1, "proj_extra": 0.0},   # homing
-	2: {"range": 190.0, "fire_rate": 0.9, "damage": 4.0, "proj_type": 2, "proj_extra": 3.0},   # perforante (3 impactos)
-	3: {"range": 170.0, "fire_rate": 1.4, "damage": 7.0, "proj_type": 3, "proj_extra": 42.0},  # splash (radio 42px)
-	4: {"range": 240.0, "fire_rate": 1.6, "damage": 9.0, "proj_type": 4, "proj_extra": 46.0},  # misil / "Mortero" (splash radio 46px al llegar)
+	0: {"range": 220.0, "fire_rate": 0.6, "damage": 6.0, "proj_type": 0, "proj_extra": 0.0, "uses_targeting": false},  # recta
+	1: {"range": 260.0, "fire_rate": 1.1, "damage": 5.0, "proj_type": 1, "proj_extra": 0.0, "uses_targeting": true},   # homing — re-apunta en vuelo
+	2: {"range": 190.0, "fire_rate": 0.9, "damage": 4.0, "proj_type": 2, "proj_extra": 3.0, "uses_targeting": false},  # perforante (3 impactos)
+	3: {"range": 170.0, "fire_rate": 1.4, "damage": 7.0, "proj_type": 3, "proj_extra": 42.0, "uses_targeting": false}, # splash (radio 42px)
+	4: {"range": 240.0, "fire_rate": 1.6, "damage": 9.0, "proj_type": 4, "proj_extra": 46.0, "uses_targeting": true},  # misil / "Mortero" — precalcula Bézier hacia el target
 	# lanzallamas / "Fuego" — familia BEAM (rectángulo ancho 70px × largo 90px, DoT bajo, linger largo).
 	# fire_rate sin uso (BEAM no pasa por el cooldown de disparo, ver tower_system.gd::tick()).
 	5: {"range": 90.0, "fire_rate": 0.0, "damage": 3.0, "proj_type": TOWER_MODE_BEAM, "proj_extra": 70.0, "dot_linger": 1.6},
@@ -94,6 +111,7 @@ func _init(p_capacity: int) -> void:
 	damage.resize(p_capacity)
 	proj_extra.resize(p_capacity)
 	dot_linger.resize(p_capacity)
+	fixed_dir.resize(p_capacity)
 
 func _swap_extra(idx: int, last: int) -> void:
 	range[idx] = range[last]
@@ -102,8 +120,9 @@ func _swap_extra(idx: int, last: int) -> void:
 	damage[idx] = damage[last]
 	proj_extra[idx] = proj_extra[last]
 	dot_linger[idx] = dot_linger[last]
+	fixed_dir[idx] = fixed_dir[last]
 
-func spawn(pos: Vector2, p_range: float, p_fire_rate: float, p_damage: float, variant: int, p_proj_extra: float = 0.0, p_dot_linger: float = 0.0) -> int:
+func spawn(pos: Vector2, p_range: float, p_fire_rate: float, p_damage: float, variant: int, p_proj_extra: float = 0.0, p_dot_linger: float = 0.0, p_fixed_dir: Vector2 = Vector2.ZERO) -> int:
 	var idx := acquire()
 	if idx == -1:
 		return -1
@@ -115,16 +134,29 @@ func spawn(pos: Vector2, p_range: float, p_fire_rate: float, p_damage: float, va
 	damage[idx] = p_damage
 	proj_extra[idx] = p_proj_extra
 	dot_linger[idx] = p_dot_linger
+	fixed_dir[idx] = p_fixed_dir
 	return idx
 
-## Coloca una torre del tipo `tower_type` (0-3) usando TOWER_TYPE_STATS.
-func spawn_typed(pos: Vector2, tower_type: int) -> int:
+## Coloca una torre del tipo `tower_type` usando TOWER_TYPE_STATS.
+## `p_fixed_dir` ya viene normalizada del llamador (nearest_point_on_path()
+## de LevelDef, calculado una sola vez acá arriba) — TowerStore no conoce
+## LevelDef a propósito, mismo criterio que el resto del store (SoA puro,
+## geometría del nivel es responsabilidad del controlador/arnés que sí
+## tiene el LevelDef en mano). Sin uso para las filas con targeting real,
+## pero no cuesta nada guardarla igual.
+func spawn_typed(pos: Vector2, tower_type: int, p_fixed_dir: Vector2 = Vector2.ZERO) -> int:
 	var stats: Dictionary = TOWER_TYPE_STATS[tower_type]
 	var effective_range: float = DEV_RANGE_OVERRIDE if DEV_RANGE_OVERRIDE > 0.0 else stats["range"]
 	var effective_fire_rate: float = DEV_FIRE_RATE_OVERRIDE if DEV_FIRE_RATE_OVERRIDE > 0.0 else stats["fire_rate"]
 	# .get() con default 0.0: solo las filas de familia BEAM (5, 6) definen
 	# dot_linger hoy — el resto no lo necesita y no hace falta poblarlo.
-	return spawn(pos, effective_range, effective_fire_rate, stats["damage"], tower_type, stats["proj_extra"], stats.get("dot_linger", 0.0))
+	return spawn(pos, effective_range, effective_fire_rate, stats["damage"], tower_type, stats["proj_extra"], stats.get("dot_linger", 0.0), p_fixed_dir)
 
 func proj_type_of(idx: int) -> int:
 	return TOWER_TYPE_STATS[type_id[idx]]["proj_type"]
+
+## true si la fila necesita blanco real (homing/misil) — ver nota de
+## TOWER_TYPE_STATS arriba. Default true para filas sin la clave (BEAM/RAIL,
+## irrelevante para ellas — tienen su propio tick, no llaman a esto).
+func uses_targeting_of(idx: int) -> bool:
+	return TOWER_TYPE_STATS[type_id[idx]].get("uses_targeting", true)

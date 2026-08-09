@@ -161,12 +161,21 @@ func _ready() -> void:
 	_parse_cli_args()
 	queue_redraw()
 
+## Dos pasadas a propósito (09-ago, encontrado al medir la tarjeta de
+## dirección fija): todo lo que coloca una torre lo hace al toque, en el
+## momento en que se procesa ese arg — si `real-stats`/`stress-fire-rate`
+## venían DESPUÉS en la línea de comandos (ej. `place-all-towers
+## real-stats`), la torre quedaba plantada con los overrides de dev
+## todavía puestos, sin avisar. Con targeting dinámico esto pasaba
+## desapercibido casi siempre (sin enemigos todavía en rango, la torre no
+## disparaba igual, override o no) — con disparo incondicional (ver
+## `TowerStore.uses_targeting_of()`) el default de dev (0.06s, 16.7
+## disparos/seg) se nota mucho, y así se encontró. Primera pasada: solo
+## ajustes/flags, ninguno coloca nada. Segunda pasada: acciones que
+## colocan torres, ya con los overrides que correspondan puestos — el
+## orden en la línea de comandos deja de importar.
 func _parse_cli_args() -> void:
 	for arg in OS.get_cmdline_user_args():
-		if arg == "place-test-towers":
-			_place_test_towers()
-		if arg == "place-all-towers":
-			_place_all_types_test()
 		if arg == "real-stats":
 			# Sin esto, DEV_RANGE_OVERRIDE/DEV_FIRE_RATE_OVERRIDE (activas por
 			# default desde la verificación de los 4 tipos originales) hacen
@@ -187,6 +196,40 @@ func _parse_cli_args() -> void:
 					_stress_towers = parts[1].to_int()
 				"stress-enemies":
 					_stress_enemies = parts[1].to_int()
+				"stress-fire-rate":
+					# Pisa DEV_FIRE_RATE_OVERRIDE (default 0.06s = ~16.7
+					# disparos/seg) para forzar población de proyectiles más
+					# alta todavía — ver stress-textures=1 más abajo, pedido
+					# puntual para empujar el pico a ~3.600 (mismo objetivo
+					# ×1.2 de siempre) en vez del disparo real lento de
+					# `real-stats` (fase2-benchmark-conjunto.md sección 12,
+					# donde proj_count nunca pasó de ~17).
+					TowerStore.DEV_FIRE_RATE_OVERRIDE = parts[1].to_float()
+				"stress-textures":
+					if parts[1] == "1":
+						_stress_textures = true
+				"backend":
+					# native ya es el default (ver _backend_native) — este
+					# caso queda solo para forzar gdscript en diagnósticos
+					# de comparación (fase2-benchmark-conjunto.md sección
+					# 13/14), no para uso normal.
+					_backend_native = parts[1] != "gdscript"
+
+	if _stress_test:
+		_setup_stress_test()
+	if _stress_textures:
+		_enable_stress_textures()
+
+	# Segunda pasada — acciones que colocan torres, con los overrides de la
+	# primera pasada ya resueltos sin importar en qué orden llegaron.
+	for arg in OS.get_cmdline_user_args():
+		if arg == "place-test-towers":
+			_place_test_towers()
+		if arg == "place-all-towers":
+			_place_all_types_test()
+		var parts := arg.split("=")
+		if parts.size() == 2:
+			match parts[0]:
 				"place-types":
 					# Subconjunto de _place_all_types_test() — para aislar un
 					# tipo (o familia, ej. "5,6" = BEAM) sin el resto
@@ -218,29 +261,6 @@ func _parse_cli_args() -> void:
 					# tamaño grande para los dos, para poder comparar a ojo
 					# sin depender de una captura de 26px.
 					_run_orientation_test(parts[1])
-				"stress-fire-rate":
-					# Pisa DEV_FIRE_RATE_OVERRIDE (default 0.06s = ~16.7
-					# disparos/seg) para forzar población de proyectiles más
-					# alta todavía — ver stress-textures=1 más abajo, pedido
-					# puntual para empujar el pico a ~3.600 (mismo objetivo
-					# ×1.2 de siempre) en vez del disparo real lento de
-					# `real-stats` (fase2-benchmark-conjunto.md sección 12,
-					# donde proj_count nunca pasó de ~17).
-					TowerStore.DEV_FIRE_RATE_OVERRIDE = parts[1].to_float()
-				"stress-textures":
-					if parts[1] == "1":
-						_stress_textures = true
-				"backend":
-					# native ya es el default (ver _backend_native) — este
-					# caso queda solo para forzar gdscript en diagnósticos
-					# de comparación (fase2-benchmark-conjunto.md sección
-					# 13/14), no para uso normal.
-					_backend_native = parts[1] != "gdscript"
-
-	if _stress_test:
-		_setup_stress_test()
-	if _stress_textures:
-		_enable_stress_textures()
 
 ## Coloca las torres pegadas al borde del carril (mismo x=30 que ya probó
 ## `_place_all_types_test()` con muertes reales) — corregido 09-ago: la
@@ -375,7 +395,10 @@ func _place_tower(pos: Vector2, tower_type: int = -1) -> bool:
 			return false
 	if _tower_store.is_full():
 		return false
-	_tower_store.spawn_typed(pos, tower_type)
+	var fixed_dir := (_level.nearest_point_on_path(pos) - pos).normalized()
+	if fixed_dir.is_zero_approx():
+		fixed_dir = Vector2.LEFT  # posición degenerada (tower_pos == punto del carril) — no debería pasar en la práctica
+	_tower_store.spawn_typed(pos, tower_type, fixed_dir)
 	return true
 
 func _unhandled_input(event: InputEvent) -> void:

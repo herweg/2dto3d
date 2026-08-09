@@ -49,30 +49,36 @@ func tick(delta: float) -> void:
 			_tick_rail(i, delta)
 			continue
 
-		tower_store.cooldown_left[i] -= delta
-		# while, no if — a cadencia real (fire_rate ≥ 0.6s, muy por encima de
-		# delta ~0.016s) esto itera una sola vez siempre, cero cambio de
-		# comportamiento. Con DEV_FIRE_RATE_OVERRIDE forzado por debajo de
-		# delta (fase2-benchmark-conjunto.md, prueba de textura+población
-		# real, 09-ago) un `if` tapaba la torre a un disparo por frame sin
-		# importar cuánto se bajara el cooldown.
-		#
-		# Ojo con esto (bug real, encontrado y corregido en el mismo pase):
-		# si no hay blanco, cooldown_left sigue restando `delta` cada frame
-		# sin techo — cuando por fin reaparece un blanco, un `break` sin más
-		# dejaría el déficit acumulado y el while lo descargaría entero de
-		# una ("ráfaga" al reenganchar, no cadencia normal). Por eso el
-		# clamp a 0.0 antes del break: sin blanco, no se banca déficit más
-		# allá de "lista para disparar ya" — un salto de 6→120 proyectiles
-		# en la regresión de place-all-towers real-stats fue lo que lo
-		# expuso (torres con huecos reales de blanco entre spawns).
-		while tower_store.cooldown_left[i] <= 0.0:
-			var target := _find_nearest_enemy(tower_store.positions[i], tower_store.range[i])
-			if target == -1:
-				tower_store.cooldown_left[i] = 0.0
-				break
-			_fire(i, proj_type, target)
-			tower_store.cooldown_left[i] += tower_store.fire_rate[i]
+		if tower_store.uses_targeting_of(i):
+			_tick_targeted(i, delta, proj_type)
+		else:
+			_tick_fixed(i, delta, proj_type)
+
+## Recto/perforante/splash (09-ago, plan-fases.md — reemplaza la tarjeta de
+## extender el hash, no la complementa): sin mecánica atada al target, así
+## que no hay nada que buscar — dispara siempre hacia tower_store.fixed_dir,
+## costo de targeting cero en el origen, no acotado. Mismo `while` que
+## _tick_targeted() para la cadencia (ver esa nota para el porqué del
+## clamp), pero acá nunca hace falta clampear por falta de blanco: sin
+## _find_nearest_enemy() de por medio, no hay "sin blanco" que banquear.
+func _tick_fixed(i: int, delta: float, proj_type: int) -> void:
+	tower_store.cooldown_left[i] -= delta
+	while tower_store.cooldown_left[i] <= 0.0:
+		_fire_fixed(i, proj_type)
+		tower_store.cooldown_left[i] += tower_store.fire_rate[i]
+
+## Homing/misil — mecánica sin cambios, solo renombrada al separarla de la
+## rama de arriba. while/clamp: ver la nota que tenía este bloque antes de
+## la bifurcación (fase2-benchmark-conjunto.md sección 13, bug de ráfaga).
+func _tick_targeted(i: int, delta: float, proj_type: int) -> void:
+	tower_store.cooldown_left[i] -= delta
+	while tower_store.cooldown_left[i] <= 0.0:
+		var target := _find_nearest_enemy(tower_store.positions[i], tower_store.range[i])
+		if target == -1:
+			tower_store.cooldown_left[i] = 0.0
+			break
+		_fire(i, proj_type, target)
+		tower_store.cooldown_left[i] += tower_store.fire_rate[i]
 
 func _fire(i: int, proj_type: int, target: int) -> void:
 	var origin := tower_store.positions[i]
@@ -90,6 +96,19 @@ func _fire(i: int, proj_type: int, target: int) -> void:
 	var splash := tower_store.proj_extra[i] if proj_type == ProjectileSystem.PROJ_SPLASH else 0.0
 
 	proj_store.spawn(origin, dir * PROJ_SPEED, PROJ_LIFE, tower_store.damage[i], proj_type, hits, homing_target, splash)
+
+## Recto/perforante/splash sin targeting (09-ago) — mismo cuerpo que _fire()
+## salvo que la dirección sale de tower_store.fixed_dir (calculada al
+## colocar la torre) en vez de un enemy_store.positions[target]. Ninguna de
+## las 3 filas con uses_targeting=false es PROJ_MISSILE ni PROJ_HOMING (esas
+## dos se quedaron en _tick_targeted()), así que no hace falta replicar esas
+## dos ramas acá — homing_target siempre -1.
+func _fire_fixed(i: int, proj_type: int) -> void:
+	var origin := tower_store.positions[i]
+	var dir := tower_store.fixed_dir[i]
+	var hits := int(tower_store.proj_extra[i]) if proj_type == ProjectileSystem.PROJ_PIERCE else 1
+	var splash := tower_store.proj_extra[i] if proj_type == ProjectileSystem.PROJ_SPLASH else 0.0
+	proj_store.spawn(origin, dir * PROJ_SPEED, PROJ_LIFE, tower_store.damage[i], proj_type, hits, -1, splash)
 
 ## Misil (fase2-plan-proyectiles.md 1.3): trayectoria fija calculada una
 ## sola vez acá — no re-apunta en vuelo. Impacta donde *hubo* el enemigo al

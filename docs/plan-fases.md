@@ -481,6 +481,83 @@ motor tenga que resolver.
    >    sin tocar el hash para los proj-spawning types, esa parte del punto
    >    1 de la tarjeta anterior queda innecesaria — no implementarla por
    >    las dudas, confirmarlo con este mismo dato primero.
+   >
+   > **Mesa de Developers, 09-ago — implementado y verificado, detalle
+   > completo en `fase2-benchmark-conjunto.md` sección 16.** Los 4 puntos
+   > de la tarjeta, tal cual: `uses_targeting` por fila (`true` solo
+   > homing/misil), `fixed_dir` calculado una vez al colocar (hacia el
+   > punto más cercano de `path_rects`), `TowerSystem.tick()` bifurcado
+   > (`_tick_fixed()` nunca llama `_find_nearest_enemy()`), BEAM/RAIL sin
+   > tocar.
+   >
+   > En el camino, la regresión encontró un bug de metodología propio (no
+   > del motor): `place-all-towers real-stats` daba 78 proyectiles en vez
+   > del 6 estable — el orden de los argumentos importaba
+   > (`place-all-towers` colocaba torres antes de que `real-stats`
+   > aplicara los overrides reales) y con disparo incondicional eso ahora
+   > sí se nota. Corregido en la raíz (`_parse_cli_args()` a dos pasadas,
+   > el orden en la línea de comandos deja de importar), no solo en cómo
+   > se invoca. Nuevo baseline estable: `torres: 8, proyectiles activos:
+   > 4, muertes: 2, leaks: 0`.
+   >
+   > **Verificación, mismo escenario de la sección 15, los mismos dos
+   > puntos de `stress-fire-rate`:**
+   >
+   > | `stress-fire-rate` | Piso antes (sección 15) | Piso después |
+   > |---|---|---|
+   > | 0.03 | 38.0fps | **58.5fps** |
+   > | 0.02 | 34.1fps | **55.0fps** |
+   >
+   > Mejora real y grande, en la dirección que predecía la tarjeta — pero
+   > no un "cero muestras bajo 60" perfectamente limpio todavía: quedan
+   > 2-6 muestras por corrida, todas en 55.0-59.9fps, dispersas a lo largo
+   > de la corrida (no concentradas en la rampa) — lectura consistente con
+   > jitter de medición, no con un costo sistemático remanente, pero no lo
+   > afirmo como hecho cerrado.
+   >
+   > Efecto colateral medido, no asumido: proj_count subió (636→1385 en el
+   > punto de 0.02) porque las torres antes fuera de rango real ahora
+   > disparan siempre — y el piso subió igual pese a eso, confirmando que
+   > la población nueva no cuesta búsqueda (no revive las secciones 13-14).
+   >
+   > **No decido si las 2-6 muestras restantes ameritan más trabajo** (¿el
+   > ~10% con targeting real? ¿ruido sin más vuelta?) — dato completo,
+   > queda para Dirección/PM. El hash sigue en pausa; no hizo falta
+   > tocarlo para llegar hasta acá.
+   >
+   > **Dirección, 09-ago — no persigo las 2-6 muestras hoy, y digo por qué
+   > en vez de dejarlo flotando.** Implementación limpia — verifiqué los 5
+   > archivos: `fixed_dir` se propaga en `_swap_extra()` (si se olvidaba
+   > eso, el swap-remove le habría dejado la dirección de otra torre a la
+   > que sobrevive, bug silencioso y feo de encontrar más tarde), la
+   > normalización con guarda de caso degenerado está en el lugar correcto
+   > (el llamador, no el store), y `_fixed_dir_for()` se replicó en
+   > `stress_main.gd` antes de que hiciera falta pedirlo — sin eso, los
+   > números históricos de `mode=joint` se habrían roto en silencio. El bug
+   > de metodología que encontraron (orden de argumentos) es exactamente el
+   > tipo de cosa que esperaba que la regresión atrapara, y la atrapó.
+   >
+   > Sobre las 55.0-59.9fps: **distingo el objetivo confirmado del
+   > hipotético.** 20-24 torres (el target real de Fase 2, el que de hecho
+   > se va a shippear pronto) sigue con margen de sobra — este cambio solo
+   > lo mejora, nunca lo empeora, porque parte de esas torres ahora ni
+   > siquiera buscan blanco. 100 torres sigue siendo el escenario de "Fase 3
+   > podría calibrar hacia acá", no un compromiso tomado. Para ese
+   > hipotético, "a un pelo de 60, disperso, no concentrado en la rampa" es
+   > un lugar razonable para pausar — mismo criterio que ya usé con el hash:
+   > no persigo el último matiz de un escenario que todavía no está
+   > confirmado como real.
+   >
+   > **Lo que sí dejo escrito, para no tener que redescubrirlo si hace
+   > falta:** el diagnóstico que cerraría esto del todo ya está identificado
+   > y es barato — aislar el ~10% con targeting real
+   > (`place-types=1,4` más `stress-test`, mismo método de aislamiento que
+   > la sección 14 ya usó para separar backend de targeting). Se corre si
+   > Fase 3 confirma 80-100+ torres como composición real de progresión —
+   > no antes. Punto (b) de la tarjeta de hace dos turnos queda así, ya
+   > actualizado: el hash sigue en pausa, y ahora con menos superficie
+   > todavía por cubrir (solo homing/misil/riel, no los 5 tipos
+   > originales).
 
 **Fase 2 queda cerrada del lado de motor — los 4 puntos cumplidos (09-ago,
 Dirección), cierre confirmado, no revertido.** Lo que sigue en vuelo (ronda
@@ -492,17 +569,22 @@ que sigue pendiente sin bloquear nada: `TODO` de
 cuadrado ya no está en esta lista — se corrigió en
 `smoke-test-motor-arte-v1.md` sección 14.
 
-**Condición de arranque de contenido — resuelta (Dirección, 09-ago).**
-`Level1.tscn` no aguantaba el objetivo de escala por dos causas ajenas al
-criterio de cierre (backend de colisión, targeting brute-force). Backend:
-corregido, `native` ya es el default. Targeting: sigue siendo brute-force
-a propósito — el único dato que muestra que pesa viene de un test
-deliberadamente patológico (rango ilimitado + cadencia ~150-400× la real),
-no de condiciones de juego reales, así que construir el hash ahora sería
-apostar sin medir el caso que de verdad importa. Queda como riesgo
-conocido con gatillo explícito: si la calibración de combate de Fase 3
-acerca la composición real a este volumen de proyectiles, se re-mide bajo
-esas condiciones antes de decidir. **Nada bloquea que Fase 3 arranque,
+**Condición de arranque de contenido — resuelta (Dirección, 09-ago,
+actualizado tras la mecánica de dirección fija).** `Level1.tscn` no
+aguantaba el objetivo de escala por dos causas ajenas al criterio de
+cierre (backend de colisión, targeting brute-force). Backend: corregido,
+`native` ya es el default. Targeting: la mayoría de las torres
+(recto/perforante/splash) ya no lo usa — disparan en dirección fija hacia
+el carril, mecánica final del catálogo, no un parche — el brute-force
+queda acotado a homing/misil (mecánicas que sí necesitan un blanco real) y
+a riel, que sigue pendiente sin cambios. A 100 torres/rango real/cadencia
+no patológica, el piso pasó de 34.1-38.0fps a 55.0-58.5fps — mejora grande,
+no perfectamente limpia (2-6 muestras justo bajo 60, lectura de jitter, no
+confirmada). No se persigue ese resto hoy — 100 torres sigue siendo
+escenario hipotético de Fase 3, no compromiso tomado; el diagnóstico para
+cerrarlo del todo (aislar homing/misil con el mismo método de la sección
+14) queda listo para correr si esa composición se confirma como real.
+**Nada bloquea que Fase 3 arranque,
 calibración de combate incluida.**
 
 ---
