@@ -471,6 +471,56 @@ pantalla jugable de verdad. Captura de la corrida combinada:
 `level1_screenshot_t14.png` (8 torres de los 8 colores en la zona gris,
 proyectiles activos en el carril).
 
+---
+
+## 10. ¿Cuesta el targeting? (09-ago, prueba breve)
+
+Pregunta puntual: ¿cuánto cuesta que una torre "elija" a quién dispararle
+(`_find_nearest_enemy()`, brute-force sobre `enemy_store.active_count`)
+contra no elegir nada? `mode=targeting` (nuevo, `stress_main.gd`): 24
+torres, 2.400 enemigos reales (mismo objetivo ×1.2 de siempre), cadencia
+forzada a 20 disparos/seg por torre (bien por encima del fire_rate real,
+para que el costo se note si existe) — única diferencia entre las dos
+corridas es la dirección: `targeting-variant=fixed` (fija, sin buscar
+nada) vs `=nearest` (la búsqueda real).
+
+| Variante | avg fps | fps mínimo |
+|---|---|---|
+| `fixed` (sin targeting) | 124.8 | 81.2 |
+| `nearest` (con targeting) | 116.0 | 76.2 |
+
+**Sí cuesta, pero poco — y solo a la cadencia forzada de esta prueba.**
+~7% de diferencia (unos 0.6ms/frame para las 24 torres juntas) a 20
+disparos/seg por torre. El fire_rate real del catálogo ronda 1 disparo/seg
+— a esa cadencia el costo medido acá escala ÷20, así que en juego real es
+indistinguible del ruido de medición. No hace falta optimizar
+`_find_nearest_enemy()` con esto — el número que importaría vigilar es
+cadencia × torres, no la búsqueda en sí.
+
+> **PM — idea de diseño, 09-ago, con una aclaración de nomenclatura
+> importante.** Esta prueba mide **targeting** (`_find_nearest_enemy()` —
+> a qué enemigo apunta una torre al elegir blanco), no **homing**
+> (`PROJ_HOMING`/`_steer_homing()` — el proyectil re-apuntando en vuelo
+> tick a tick, un mecanismo distinto, ya medido aparte desde Sprint 2, y ya
+> naturalmente acotado a un solo tipo de torre, la Homing). Hoy
+> `_find_nearest_enemy()` lo usan casi todas las torres del catálogo
+> (recto, perforante, splash, misil, homing — todas menos beam/riel que
+> targetean distinto), así que "limitarlo a ciertas torretas" sería un
+> cambio de diseño real, no uno chico: el resto pasaría a necesitar un modo
+> de targeting "tonto" (fijo, orden de spawn, aleatorio) como comportamiento
+> base, y "busca al más cercano" se volvería una mejora que se gana, no el
+> default.
+>
+> **Vale la pena explorarlo como palanca de diseño** (diferenciar torres
+> baratas/tontas de torres mejoradas/inteligentes, con costo real como
+> justificación narrativa) — pero que quede claro: **la propia medición de
+> arriba dice que no hace falta por rendimiento.** Si se persigue, es una
+> decisión de gameplay/progresión, no una respuesta a un problema de
+> motor. No implementar esto todavía — es una idea para la lista de
+> calibración de combate, no una tarjeta activa.
+
+---
+
 **Herramientas nuevas en `level_controller.gd`**, quedan disponibles para
 la próxima vez que haga falta verificar algo en esta pantalla sin pasar por
 `stress_main.gd`: `place-all-towers` (los 8 tipos, uno de cada), `place-types=<csv>`

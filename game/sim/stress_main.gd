@@ -36,9 +36,20 @@ extends Node2D
 ##                      tamaño de cada escalón (mismos emisores/capas que
 ##                      mode=vfx) — sin el flag, mide población+render real
 ##                      sola, para tener el punto de comparación limpio.
+##   mode=targeting     ¿cuesta el targeting? (pedido explícito 08-ago) — 24
+##                      torres a cadencia forzada (TARGETING_FIRE_INTERVAL,
+##                      no la real, para maximizar la señal) contra 2.400
+##                      enemigos reales, comparando SOLO cómo eligen
+##                      dirección: targeting-variant=fixed (dirección fija,
+##                      sin buscar nada) vs =nearest (_find_nearest_enemy(),
+##                      el mismo método brute-force que ya usa TowerSystem).
+##                      No pasa por TowerSystem — es una réplica mínima a
+##                      propósito, para que la única diferencia entre las
+##                      dos corridas sea la búsqueda de objetivo.
 ## Parámetros comunes: proj-type=mixed|0-5, tower-type=0-7, backend=gdscript|native,
 ## level-duration=<seg>, hold-at-peak=<seg>, vfx-test=unit|scenario|overdraw|tint,
-## vfx-count=<N> (solo vfx-test=overdraw), vfx-scale-fx=0|1 (solo mode=vfx-scale)
+## vfx-count=<N> (solo vfx-test=overdraw), vfx-scale-fx=0|1 (solo mode=vfx-scale),
+## targeting-variant=fixed|nearest (solo mode=targeting)
 
 const LEVEL_DEF := preload("res://data/level_01.tres")
 
@@ -110,6 +121,13 @@ const VFX_SCALE_TOWER_LEVELS := [5, 8, 12, 16, 20, 24]
 const VFX_SCALE_PROJ_RATIO := 1.5  # mismo ratio que JOINT_PROJ_TARGET/JOINT_ENEMY_TARGET (3000/2000)
 const VFX_SCALE_TOWER_TYPES := 4   # "torres normales" — cicla tipos 0-3 (recto/homing/perforante/splash), no BEAM/riel/misil
 
+## mode=targeting — ¿cuánto cuesta que la torre "apunte"?
+const TARGETING_TOWER_COUNT := 24        # mismo objetivo ×1.2 de siempre
+const TARGETING_FIRE_INTERVAL := 0.05    # cadencia forzada — "disparan a discreción", no el fire_rate real
+const TARGETING_PROJ_SPEED := 400.0
+const TARGETING_PROJ_LIFE := 1.0
+const TARGETING_PROJ_DAMAGE := 1.0
+
 var _mode := "enemies"
 var _proj_type_arg := "mixed"
 var _tower_type_arg := 3  # splash ("las explosivas") por default para mode=towers
@@ -166,6 +184,9 @@ var _vfx_scale_fx := false  # vfx-scale-fx=1
 var _vfx_scale_particles_added := 0
 var _vfx_scale_overdraw_added := 0
 
+var _targeting_variant_arg := "nearest"
+var _targeting_cooldowns: PackedFloat32Array
+
 func _ready() -> void:
 	# Sin esto, a poblacion baja (mode=vfx-scale, escalones iniciales) el
 	# frame time mide el refresco del monitor (144Hz acá), no el motor — un
@@ -185,7 +206,7 @@ func _ready() -> void:
 	_tower_system = TowerSystem.new(_tower_store, _enemy_store, _proj_store, _hash)
 	_dot_system = DotSystem.new(_enemy_store)
 
-	if _mode == "joint" or _mode == "vfx" or _mode == "vfx-scale" or _backend_arg == "native":
+	if _mode == "joint" or _mode == "vfx" or _mode == "vfx-scale" or _mode == "targeting" or _backend_arg == "native":
 		if ClassDB.class_exists("SimHotPath"):
 			_proj_system.native = ClassDB.instantiate("SimHotPath")
 			_backend_arg = "native"
@@ -225,12 +246,14 @@ func _ready() -> void:
 			_setup_vfx()
 		"vfx-scale":
 			_setup_vfx_scale()
+		"targeting":
+			_setup_targeting()
 		_:
 			_mode = "enemies"
 			_levels = ENEMY_LEVELS
 
 	var total_time: float
-	if _mode == "joint" or _mode == "vfx":
+	if _mode == "joint" or _mode == "vfx" or _mode == "targeting":
 		total_time = 4.0 + _hold_at_peak  # la rampa a población fija tarda unos pocos segundos, no 30
 	else:
 		total_time = _level_duration * _levels.size() + _hold_at_peak
@@ -241,6 +264,8 @@ func _ready() -> void:
 		tag = _mode + "_" + _vfx_test_arg
 	elif _mode == "vfx-scale":
 		tag = _mode + ("_fx" if _vfx_scale_fx else "_base")
+	elif _mode == "targeting":
+		tag = _mode + "_" + _targeting_variant_arg
 	elif _sprite_arg and _mode == "enemies":
 		tag = _mode + "_sprite"
 	var out_path := "res://benchmark_results/stress_%s_%d.csv" % [tag, Time.get_unix_time_from_system()]
@@ -342,6 +367,51 @@ func _sync_vfx_scale_fx(towers: int) -> void:
 	while _vfx_scale_overdraw_added < target_overdraw:
 		add_child(_make_overdraw_layer(overdraw_pos))
 		_vfx_scale_overdraw_added += 1
+
+## mode=targeting — 24 torres reales ×1.2, cadencia forzada, contra 2.400
+## enemigos reales ×1.2 (mismo piso de siempre). No usa TowerSystem —
+## _tick_targeting() abajo es una réplica mínima a propósito, para que la
+## única diferencia entre targeting-variant=fixed y =nearest sea la línea
+## que elige dirección, nada de la maquinaria alrededor.
+func _setup_targeting() -> void:
+	TowerStore.DEV_RANGE_OVERRIDE = 0.0
+	TowerStore.DEV_FIRE_RATE_OVERRIDE = 0.0
+	_joint_enemy_target = int(round(JOINT_ENEMY_TARGET * JOINT_MARGIN))
+	_joint_proj_target = 0  # sin inyector sintético — solo lo que las torres disparan
+	_joint_tower_target = TARGETING_TOWER_COUNT
+	_levels = [_joint_enemy_target]
+
+	_targeting_cooldowns.resize(TARGETING_TOWER_COUNT)
+	for i in TARGETING_TOWER_COUNT:
+		var col := i % 12
+		var row := i / 12
+		var pos := Vector2(-620.0 + col * 40.0, -350.0 + row * 40.0)
+		_tower_store.spawn(pos, 99999.0, TARGETING_FIRE_INTERVAL, TARGETING_PROJ_DAMAGE, 0)
+		_targeting_cooldowns[i] = randf() * TARGETING_FIRE_INTERVAL  # desfasa el primer disparo entre torres
+
+## targeting-variant=fixed: dirección constante, cero búsqueda.
+## targeting-variant=nearest: TowerSystem._find_nearest_enemy() — el mismo
+## brute-force O(enemy_store.active_count) que usa el juego real hoy para
+## los tipos que spawnean proyectil.
+func _tick_targeting(delta: float) -> void:
+	var fixed_variant := _targeting_variant_arg == "fixed"
+	for i in TARGETING_TOWER_COUNT:
+		_targeting_cooldowns[i] -= delta
+		if _targeting_cooldowns[i] > 0.0:
+			continue
+		_targeting_cooldowns[i] = TARGETING_FIRE_INTERVAL
+
+		var pos := _tower_store.positions[i]
+		var dir: Vector2
+		if fixed_variant:
+			dir = Vector2(-1.0, 0.0)
+		else:
+			var target := _tower_system._find_nearest_enemy(pos, 99999.0)
+			if target == -1:
+				continue
+			dir = (_enemy_store.positions[target] - pos).normalized()
+
+		_proj_store.spawn(pos, dir * TARGETING_PROJ_SPEED, TARGETING_PROJ_LIFE, TARGETING_PROJ_DAMAGE, ProjectileSystem.PROJ_STRAIGHT)
 
 ## Reparte N puntos a lo largo de la fila de torres del benchmark conjunto
 ## (mismo layout que _ensure_towers()) — para que los emisores de VFX estén
@@ -448,6 +518,8 @@ func _parse_cli_args() -> void:
 				_vfx_count_arg = parts[1].to_int()
 			"vfx-scale-fx":
 				_vfx_scale_fx = parts[1] == "1"
+			"targeting-variant":
+				_targeting_variant_arg = parts[1]
 
 func _current_target() -> int:
 	return _levels[_level_idx]
@@ -549,6 +621,9 @@ func _process(delta: float) -> void:
 		_ensure_towers(_joint_tower_target, true)
 		if _vfx_tint_material:
 			_vfx_tint_material.set_shader_parameter("hue_shift", fmod(_elapsed * 0.3, 1.0))
+	elif _mode == "targeting":
+		_top_up_enemies(_joint_enemy_target, FIXED_ENEMY_HEALTH)
+		_tick_targeting(delta)
 	else:
 		_level_timer += delta
 		if _level_timer >= _level_duration and not _at_final_level():
@@ -590,7 +665,7 @@ func _process(delta: float) -> void:
 	_logger.tick(delta, _proj_store.active_count, _enemy_store.active_count)
 	_maybe_screenshot()
 
-	if _mode == "joint" or _mode == "vfx":
+	if _mode == "joint" or _mode == "vfx" or _mode == "targeting":
 		if not _joint_ramped:
 			if _enemy_store.active_count >= int(_joint_enemy_target * 0.95) and _proj_store.active_count >= int(_joint_proj_target * 0.9) and _tower_store.active_count >= _joint_tower_target:
 				_joint_ramped = true
@@ -624,7 +699,7 @@ func _maybe_screenshot() -> void:
 func _finish() -> void:
 	_quitting = true
 	_logger.close()
-	var final_target = _joint_proj_target if (_mode == "joint" or _mode == "vfx") else _levels[_level_idx]
+	var final_target = _joint_enemy_target if _mode == "targeting" else (_joint_proj_target if (_mode == "joint" or _mode == "vfx") else _levels[_level_idx])
 	print("[stress] listo — modo=%s vfx-test=%s backend=%s nivel_final=%d proy=%d enem=%d torres=%d" % [_mode, _vfx_test_arg, _backend_arg, final_target, _proj_store.active_count, _enemy_store.active_count, _tower_store.active_count])
 	get_tree().quit()
 
