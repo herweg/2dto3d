@@ -844,6 +844,54 @@ familias BEAM/RAIL (las únicas con rango acotado hoy) sigan siendo las
 
 ---
 
+## 14. Respuesta del director — (a) ejecutado, (b) dato de aislamiento (09-ago)
+
+**(a) `backend=native` por default en `Level1.tscn` — ejecutado.**
+`level_controller.gd`: `SimHotPath` se instancia siempre en `_ready()`
+(antes solo bajo `backend=native` explícito); `_backend_native` default
+`true`. `backend=gdscript` sigue disponible para forzar la ruta vieja en
+diagnósticos como el de abajo — no para uso normal. Regresión
+(`place-all-towers real-stats`, headless): `torres: 8, proyectiles activos:
+6, muertes: 7, leaks: 0` — idéntico al número estable de siempre.
+
+**(b) Comparación limpia, mismo punto de población, misma sesión —
+pedido explícito del director** (la sección 13 nunca tuvo los dos backends
+al mismo `proj_count`: GDScript se midió a ~3.600-4.000, nativo solo a
+~500-555). Mismos parámetros exactos salvo `backend`, corridos uno
+después del otro, ventana, Vulkan real, texturas en los 3 grupos,
+`stress-fire-rate=0.004`, post-fix del bug de ráfaga de la sección 13:
+
+| Backend | proj_count (rango) | Piso | Promedio (post-rampa) | Muestras bajo 60 |
+|---|---|---|---|---|
+| GDScript (`backend=gdscript`) | 3878-4000 | 7.6 | 8.4 | 10/10 |
+| Nativo (`backend=native`) | 3936-4000 | 7.8 | 10.6 | 11/12 |
+
+**El backend casi no explica nada acá — el piso es prácticamente
+idéntico (7.6 vs 7.8), el promedio post-rampa mejora poco (8.4→10.6,
+∼25%).** Contraste directo con la sección 13 a población moderada
+(~500-555 proyectiles), donde el mismo cambio de backend movía el piso de
+43 a 52-55fps y el promedio de 56 a 75fps — una mejora real y grande. A
+~3.600-4.000 esa mejora prácticamente desaparece: `SimHotPath` acelera la
+colisión proyectil-enemigo, pero a este volumen el costo dominante ya no
+es ese — es `_find_nearest_enemy()` (brute-force, sin tocar por
+`SimHotPath`), multiplicado por la cantidad de disparos/frame que hacen
+falta para que 24 torres sostengan ~3.600 proyectiles. Aislado, no
+supuesto: mismo `proj_count`, mismo frame, único eje que cambia es el
+backend, y el piso no se mueve.
+
+**Conclusión para la pregunta (b):** con este dato, extender el hash
+espacial a `_find_nearest_enemy()` es la palanca que le pega al cuello de
+botella real a esta escala — el backend nativo ya está y no alcanza solo.
+Sigue siendo decisión del director si vale la pena para las 20 torretas
+reales del catálogo (con rango real 170-260px, no el `DEV_RANGE_OVERRIDE`
+ilimitado de este test) — ese es un escenario más favorable al hash que
+éste (rango acotado = candidatos acotados por celda, que es exactamente
+donde el hash rinde), pero también un escenario que nunca necesita
+disparar tan rápido como este test forzó. No lo decido ni lo implemento
+acá — dato de aislamiento nada más, tal como se pidió.
+
+---
+
 **Herramientas nuevas en `level_controller.gd`**, quedan disponibles para
 la próxima vez que haga falta verificar algo en esta pantalla sin pasar por
 `stress_main.gd`: `place-all-towers` (los 8 tipos, uno de cada), `place-types=<csv>`

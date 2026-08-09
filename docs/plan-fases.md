@@ -292,6 +292,64 @@ motor tenga que resolver.
    >    número aísla cuánto del catastrófico 9-11fps es backend y cuánto es
    >    targeting; con eso decido si toca extender el hash a las 20 torretas
    >    o alcanza con lo que ya cubre BEAM/RAIL.
+   >
+   > **Mesa de Developers, 09-ago.**
+   >
+   > 1. **Ejecutado.** `SimHotPath` se instancia siempre en `_ready()` de
+   >    `level_controller.gd`, `_backend_native` default `true`.
+   >    `backend=gdscript` queda como override explícito solo para
+   >    diagnóstico (usado abajo, para poder seguir comparando). Regresión
+   >    (`place-all-towers real-stats`, headless): idéntico de siempre —
+   >    `torres: 8, proyectiles activos: 6, muertes: 7, leaks: 0`.
+   > 2. **Dato aislado, mismo punto de población, misma sesión** (detalle
+   >    completo en `fase2-benchmark-conjunto.md` sección 14) —
+   >    `stress-fire-rate=0.004`, texturas en los 3 grupos, ventana, Vulkan
+   >    real, un backend después del otro, sin cambiar nada más:
+   >
+   >    | Backend | proj_count | Piso | Promedio post-rampa |
+   >    |---|---|---|---|
+   >    | GDScript | 3878-4000 | 7.6 | 8.4 |
+   >    | Nativo | 3936-4000 | 7.8 | 10.6 |
+   >
+   >    **El backend explica casi nada a esta escala** — piso
+   >    prácticamente idéntico (7.6 vs 7.8), promedio post-rampa sube
+   >    ~25% (8.4→10.6) pero sigue catastrófico. Contraste directo con la
+   >    sección 13 a población moderada, donde el mismo cambio de backend
+   >    sí movía el piso de forma grande (43→52-55fps). A ~3.600-4.000 el
+   >    costo dominante ya no es la colisión que acelera `SimHotPath` — es
+   >    `_find_nearest_enemy()`, sin tocar por el backend nativo, escalado
+   >    por la cantidad de disparos/frame que hacen falta para sostener esa
+   >    población con solo 24 torres. No decido ni implemento el fix del
+   >    hash — dato de aislamiento, tal como se pidió.
+   >
+   > **Dirección, 09-ago — (a) confirmado, (b) no lo hago todavía, y esta
+   > vez no pido otro dato: la razón es la condición del test, no el
+   > número.** El dato de aislamiento es exactamente lo que pedí y está
+   > bien medido — pero mide un caso deliberadamente patológico en dos ejes
+   > a la vez: `DEV_RANGE_OVERRIDE` (rango ilimitado, el peor caso posible
+   > para brute-force y el que menos favorece al hash) y
+   > `stress-fire-rate=0.004` (250 disparos/seg por torre, ~150-400× más
+   > rápido que cualquier fila real de `TOWER_TYPE_STATS`, 0.6-1.6s). El
+   > propio dato de la sección 14 ya lo dice: rango real ayudaría al hash,
+   > cadencia real jamás pediría este volumen de búsquedas. No sé, con lo
+   > que hay hoy, si 24-20 torres a fire_rate real generan alguna vez algo
+   > cercano a 3.600 proyectiles simultáneos — esa es una pregunta de
+   > diseño de combate (Fase 3), no algo que pueda inferir de un test
+   > armado para forzar el peor caso.
+   >
+   > **No construyo el hash para `_find_nearest_enemy()` ahora.** Sería
+   > gastar trabajo de motor real contra un escenario que todavía no sé si
+   > el juego real produce — exactamente el tipo de apuesta sin medir que
+   > este proyecto viene evitando desde el spike de Sprint 2. Queda anotado
+   > como riesgo conocido, con gatillo explícito en vez de quedar flotando:
+   > **si la calibración de combate de Fase 3 acerca la composición real
+   > (rango real, cadencia real) a este volumen de proyectiles, se vuelve a
+   > medir bajo esas condiciones — no las de este test — antes de decidir
+   > si hace falta.**
+   >
+   > Con esto, la condición de arranque de contenido queda resuelta: (a)
+   > hecho, (b) evaluado y conscientemente no accionado todavía. Nada
+   > bloquea que Fase 3 arranque, calibración de combate incluida.
 
 **Fase 2 queda cerrada del lado de motor — los 4 puntos cumplidos (09-ago,
 Dirección), cierre confirmado, no revertido.** Lo que sigue en vuelo (ronda
@@ -303,18 +361,18 @@ que sigue pendiente sin bloquear nada: `TODO` de
 cuadrado ya no está en esta lista — se corrigió en
 `smoke-test-motor-arte-v1.md` sección 14.
 
-**Condición de arranque de contenido, distinta del cierre de arriba
-(Dirección, 09-ago):** `Level1.tscn` — la escena real, no un arnés —
-recién se probó a población real por primera vez hoy (sección 12-13 de
-`fase2-benchmark-conjunto.md`) y no aguantaba el objetivo, por dos causas
-ajenas a las 4 del criterio de cierre (backend de colisión, targeting
-brute-force). `backend=native` ya pasa a default (decidido arriba); falta
-el dato de `_find_nearest_enemy()` con nativo activo antes de decidir la
-segunda mitad. **Fase 3 puede arrancar en paralelo del lado de diseño/
-alcance** (nada de `fase3-alcance-v1.md` depende de fps) **pero no debería
-calibrar números de combate reales sobre `Level1.tscn` hasta que esto
-cierre** — calibrar HP/daño contra una escena que todavía no sabemos si
-sostiene 60fps sería trabajo a repetir.
+**Condición de arranque de contenido — resuelta (Dirección, 09-ago).**
+`Level1.tscn` no aguantaba el objetivo de escala por dos causas ajenas al
+criterio de cierre (backend de colisión, targeting brute-force). Backend:
+corregido, `native` ya es el default. Targeting: sigue siendo brute-force
+a propósito — el único dato que muestra que pesa viene de un test
+deliberadamente patológico (rango ilimitado + cadencia ~150-400× la real),
+no de condiciones de juego reales, así que construir el hash ahora sería
+apostar sin medir el caso que de verdad importa. Queda como riesgo
+conocido con gatillo explícito: si la calibración de combate de Fase 3
+acerca la composición real a este volumen de proyectiles, se re-mide bajo
+esas condiciones antes de decidir. **Nada bloquea que Fase 3 arranque,
+calibración de combate incluida.**
 
 ---
 

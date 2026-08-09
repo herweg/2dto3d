@@ -106,7 +106,13 @@ const STRESS_BG_TEX := "res://assets/torreta_recta_v3_small.png"
 ## (mismo nombre que ya usa `stress_main.gd`) lo activa acá también, sin
 ## cambiar el default — nadie lo pedía hasta hoy porque nadie había medido
 ## esta pantalla a la escala real.
-var _backend_native := false
+##
+## Decisión del director (09-ago, plan-fases.md): default a `native` — el
+## dato no dejaba margen (43fps de piso en GDScript vs 52-55fps en nativo,
+## a población moderada, `fase2-benchmark-conjunto.md` sección 13).
+## `backend=gdscript` sigue disponible para diagnóstico/comparación (ver
+## sección 14, aislar backend de targeting), no para uso normal.
+var _backend_native := true
 
 ## Vida alta (no infinita) solo para el modo de estrés: con 30 torres a
 ## cadencia de DEV_FIRE_RATE_OVERRIDE, la vida normal (ENEMY_HEALTH=20) hace
@@ -133,6 +139,11 @@ func _ready() -> void:
 
 	_hash = SpatialHash.new(SPATIAL_CELL_SIZE)
 	_proj_system = ProjectileSystem.new(_proj_store, _enemy_store, _hash)
+	if ClassDB.class_exists("SimHotPath"):
+		_proj_system.native = ClassDB.instantiate("SimHotPath")
+	else:
+		push_error("[level1] SimHotPath no está registrado — ¿falta compilar game/rust/? backend=native no va a andar.")
+		_backend_native = false
 	_lane_system = LaneEnemySystem.new(_enemy_store, _level.waypoints, _level.obstacles, _level.obstacle_radius)
 	_tower_system = TowerSystem.new(_tower_store, _enemy_store, _proj_store, _hash)
 	_dot_system = DotSystem.new(_enemy_store)
@@ -218,12 +229,11 @@ func _parse_cli_args() -> void:
 					if parts[1] == "1":
 						_stress_textures = true
 				"backend":
-					if parts[1] == "native":
-						if ClassDB.class_exists("SimHotPath"):
-							_proj_system.native = ClassDB.instantiate("SimHotPath")
-							_backend_native = true
-						else:
-							push_error("[level1] backend=native pedido pero SimHotPath no está registrado")
+					# native ya es el default (ver _backend_native) — este
+					# caso queda solo para forzar gdscript en diagnósticos
+					# de comparación (fase2-benchmark-conjunto.md sección
+					# 13/14), no para uso normal.
+					_backend_native = parts[1] != "gdscript"
 
 	if _stress_test:
 		_setup_stress_test()
