@@ -370,3 +370,116 @@ Vuelve al director/PM para decidir si vale la pena setear
 `default_texture_filter` a nivel de proyecto (afecta a las 20 torretas del
 catálogo, no solo esta) o dejarlo por torreta cuando cada una tenga sprite
 — esa es una decisión de alcance, no de motor.
+
+## 12. Resultado — ¿ayuda una fuente más chica? (09-ago, pregunta del usuario)
+
+**Pregunta:** el usuario generó dos versiones más chicas de la misma
+Torreta Recta (achicadas a partir de la muestra ronda 2 ya aprobada como
+referencia de espejado, no una generación nueva de Arte —
+`docs/try-assets/gpt/result_...fliped - copia.png`, 355×422, y
+`result_result_...fliped - copia.png`, 107×127) y preguntó si acercar el
+tamaño de origen al tamaño real de juego (26px) resuelve el problema, y de
+ser así, qué tamaño exacto pedirle a Arte para no tener que reescalar nunca
+en motor.
+
+### Cómo se corrió
+
+Mismo método de las secciones 8/11: recorte al bounding box de alfa
+(padding=2) → `torreta_recta_v3_med.png` (334×410) y
+`torreta_recta_v3_small.png` (105×127) → import default → `sprite-test=`
+real en `Level1.tscn`, Vulkan real, quad de 26px, mismo recorte 36×36
+fijo. Métrica de ruido igual que en la sección 11 (variación de luminancia
+entre píxeles vecinos), esta vez **excluyendo fondo y proyectiles en
+tránsito** de la medición (un proyectil cruzó cerca de la torre en algunos
+frames — ruido de simulación, no del asset; ver
+`sprite_test_compare_4way_sizes.png` para las capturas crudas con el
+proyectil visible al costado).
+
+| Variante | Ruido (TV, menor = mejor) | Luminancia media |
+|---|---|---|
+| 950px fuente, sin mipmaps (baseline sección 8) | 69.18 | 87.7 |
+| 334px fuente, sin mipmaps | 62.87 | 87.1 |
+| 105px fuente, sin mipmaps | **42.63** | 88.8 |
+| 950px fuente + mipmaps + filtro correcto (sección 11) | 15.34 | 87.7 |
+| 105px fuente + mipmaps + filtro correcto | **13.45** | 82.2 |
+
+Comparación visual de las primeras 4 filas, mismo recorte, en orden:
+`sprite_test_compare_4way_sizes.png`.
+
+### Respuesta a la pregunta
+
+**Sí ayuda, pero no alcanza sola.** El ruido baja de forma consistente al
+achicar la fuente (950→334→105px: 69→63→43), confirmando la intuición del
+usuario — menos relación de downscale, menos aliasing. Pero incluso la
+fuente más chica probada (105px, todavía ~4× más grande que el render
+final) se queda lejos de lo que logra **arreglar el filtro de mipmaps solo**
+sobre la fuente grande sin tocar (43 vs 15) — la palanca de motor de la
+sección 11 sigue siendo la que más mueve la aguja. Combinar las dos
+(fuente chica + mipmaps + filtro) da el mejor número de todos (13.45), pero
+la ganancia extra sobre "fuente grande + mipmaps + filtro" es marginal
+(~12%) — la mayor parte de la mejora ya la daba el filtro, no el tamaño de
+origen.
+
+**Caveat importante, no menor:** las dos muestras chicas son **recortes
+achicados de la misma pintura grande** (mismo detalle pintado, solo
+promediado al reducir), no una generación nueva de Arte pedida
+directamente en 355px o 107px. No sé si pedirle a la IA generadora que
+dibuje nativamente en un lienzo chico daría un resultado distinto (mejor o
+peor) al de simplemente achicar la pintura grande — esa pregunta específica
+no está probada acá y no la voy a inferir. Si se quiere probar de verdad,
+hace falta una generación nueva a propósito, con costo de créditos de Arte
+— no lo recomiendo como próximo paso dado lo poco que sumó el tamaño de
+fuente por sí solo frente al filtro, que es gratis.
+
+### Hallazgo adicional (no buscado): el quad de torre fuerza aspecto cuadrado
+
+Verificando esto armé una comparación directa `Sprite2D` (referencia,
+preserva aspecto) vs. el `MultiMeshInstance2D` real del juego, mismo
+tamaño nominal (`orientation-test=`, capturas
+`aspect_ref_sprite2d.png` / `aspect_entityrendersync.png`): **el quad de
+torre es cuadrado fijo (`quad.size = Vector2(quad_size, quad_size)` en
+`entity_render_sync.gd`), sin importar el aspecto real del source.** La
+Torreta Recta (950×1166, más angosta que alta, aspecto 0.815) se ve
+perceptiblemente más "achatada/ancha" en el `MultiMeshInstance2D` que en
+la referencia `Sprite2D` de al lado — comparación visual en las dos
+capturas de arriba. No es sutil una vez que se ponen los dos lado a lado a
+gran tamaño; a 26px reales queda enmascarado por el resto del ruido, pero
+está.
+
+**Esto es relevante directamente para la pregunta de qué tamaño pedirle a
+Arte.**
+
+### Recomendación de tamaño
+
+**No pediría a Arte que genere en un tamaño exacto de píxeles fijo.** Tres
+razones:
+
+1. El motor fuerza cuadrado hoy — pedir "26×26 exacto" no resuelve nada
+   mientras el quad siga siendo cuadrado y el arte siga siendo
+   naturalmente vertical (robot sobre trípode); seguiría distorsionándose.
+   Arreglar esto es una tarjeta de motor chica y separada (guardar
+   ancho/alto por tipo en vez de un solo `quad_size` cuadrado) — recién
+   ahí tendría sentido pedirle a Arte un lienzo con el aspecto real de
+   cada pieza.
+2. Un tamaño de píxeles exacto es frágil: cualquier ronda futura de ajuste
+   de prompt (como la ronda 3 en curso, sección 10) no va a salir en el
+   pixel exacto que se pidió, y cada revisión de Arte tendría que volver a
+   encajar en esa medida — costo de coordinación recurrente por una
+   ganancia marginal (~12% sobre lo que ya da gratis el filtro).
+3. La palanca que más rinde (mipmaps + filtro correcto, sección 11) es
+   **gratis, de motor, y no le pide nada nuevo a Arte** — funciona sobre
+   cualquier tamaño de fuente que Arte entregue, presente o futuro.
+
+**Lo que sí recomendaría, en orden:** (a) resolver primero la sección 11
+(activar el filtro de mipmaps, decisión de Director/PM ya pendiente ahí);
+(b) si eso más la ronda 3 en curso no alcanza, ahí sí vale la pena la
+tarjeta de motor del quad no-cuadrado, para que Arte pueda trabajar en el
+aspecto natural de cada pieza sin que el render lo aplaste — pero como
+mejora de fidelidad, no como sustituto de (a); (c) no gastaría créditos de
+Arte en una generación nativa a tamaño chico hasta agotar (a) y (b), dado
+lo que ya se midió acá.
+
+Si el director prefiere confirmarlo a ojo antes de decidir, las capturas
+de esta sección (`sprite_test_compare_4way_sizes.png`,
+`aspect_ref_sprite2d.png` vs `aspect_entityrendersync.png`) alcanzan sin
+correr nada de nuevo.
