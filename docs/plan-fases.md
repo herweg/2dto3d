@@ -399,6 +399,88 @@ motor tenga que resolver.
    >    `place-all-towers` de esta pantalla) — esto toca `game/sim/
    >    tower_system.gd`, código compartido por las dos pantallas, no un
    >    cambio acotado a una sola.
+   >
+   > **Dirección, 09-ago — reevaluación, pedido del usuario: reemplazar
+   > (no complementar primero) el enfoque de arriba.** Propuesta: la
+   > mayoría de las torres disparan en una dirección fija, sin buscar
+   > blanco — mecánica final del juego (Fase 3 deja que el jugador elija el
+   > ángulo al colocar; por ahora, dirección fija automática), no un atajo
+   > de rendimiento disfrazado. Targeting real (`_find_nearest_enemy()`)
+   > queda reservado a una minoría de torres — el usuario propone ~10% como
+   > proporción realista.
+   >
+   > **Técnicamente, esto es mejor que acotar la búsqueda con el hash — no
+   > la optimiza, elimina la necesidad de hacerla.** Una torre sin target
+   > dinámico no llama a `_find_nearest_enemy()` nunca, ni acotada ni
+   > brute-force — el costo que medían las secciones 13-15 desaparece en
+   > el origen para esas torres, no se reduce. Con ~10% de 100 torres
+   > (~10) haciendo búsqueda real en vez de las ~100 de la sección 15, el
+   > volumen de la operación cara ya cae ~10× antes de tocar el hash —
+   > plausible que ni haga falta acotarla para ese remanente, pero no lo
+   > asumo: se mide después de implementar, no antes.
+   >
+   > **La proporción del 10% no hay que elegirla a mano — ya está implícita
+   > en qué torres necesitan un target por mecánica propia, no por
+   > preferencia de diseño:**
+   > - **Homing** (`type_id 1`) re-apunta en vuelo (`_steer_homing()`) — sin
+   >   target inicial no tiene sentido, se queda en targeting real.
+   > - **Misil/Mortero** (`type_id 4`) precalcula una curva de Bézier hacia
+   >   una posición de impacto (`set_trajectory()`) — también necesita un
+   >   target real para ese cálculo, se queda en targeting real.
+   > - **Recto, perforante, splash** (`type_id` 0/2/3) — ya disparan en
+   >   línea recta hacia donde sea que apunten; no tienen ninguna mecánica
+   >   propia atada al target, pasan a dirección fija sin cambiar su
+   >   identidad.
+   > - Con el catálogo de 20 completo, la proporción real de "torres que
+   >   necesitan target de verdad" (homing, francotiradora, y lo que el
+   >   diseño de Fase 3 sume a esa lista) probablemente ronda el 10% que
+   >   pedía el usuario de forma natural, no impuesta — dato a confirmar
+   >   cuando el catálogo crezca, no algo que fuerce ahora.
+   >
+   > **Falta definir una sola cosa antes de implementar: qué significa
+   > "adelante" para una torre sin orientación propia hoy.** Propongo
+   > dirección hacia el punto más cercano del carril (`waypoints`/
+   > `path_rects`), calculada una sola vez al colocar la torre (barata, no
+   > por tick) — asegura que las torres cerca del carril de verdad le
+   > apunten, y es exactamente el campo que Fase 3 va a reemplazar por la
+   > elección del jugador más adelante (mismo dato, otra fuente). Una
+   > dirección fija de mundo (siempre +X) sería más simple pero podría
+   > apuntar a la nada según la curva del carril — no lo recomiendo.
+   >
+   > **Efecto colateral a medir, no a asumir:** con target dinámico, una
+   > torre sin nadie en rango no dispara (`cooldown_left` se clampea a 0.0,
+   > sección 13). Con dirección fija, esa misma torre **sí** dispara
+   > siempre — cada disparo sigue siendo una entidad real en
+   > `ProjectileStore` que `SimHotPath` tiene que simular hasta que expire
+   > (`PROJ_LIFE=1.5s`), aunque no le pegue a nada. Con ~90 torres
+   > potencialmente "vacías" disparando sin blanco a cadencia real, eso
+   > puede sumar población de proyectiles que antes no existía. No lo creo
+   > suficiente para revivir el problema de las secciones 13-14 (son
+   > decenas de proyectiles extra, no miles), pero se confirma re-corriendo
+   > el mismo escenario de la sección 15 después del cambio — mismo
+   > criterio de siempre, no se asume.
+   >
+   > **Tarjeta revisada para Mesa de Developers — reemplaza los 3 puntos de
+   > arriba, no los suma:**
+   > 1. Campo nuevo en `TowerStore` (o en `TOWER_TYPE_STATS`): dirección
+   >    fija por torre, calculada en `spawn_typed()`/`spawn()` hacia el
+   >    punto más cercano del carril. `uses_targeting` (o similar) por fila
+   >    de `TOWER_TYPE_STATS`: `true` para homing y misil, `false` para
+   >    recto/perforante/splash.
+   > 2. `TowerSystem.tick()`: las filas con `uses_targeting=false` disparan
+   >    directo a la dirección fija en cada `cooldown_left<=0.0` (sin
+   >    llamar `_find_nearest_enemy()`), mismo `while` de la sección 13
+   >    para la cadencia. Las filas con `uses_targeting=true` siguen exactamente
+   >    como hoy.
+   > 3. BEAM/RAIL no cambian — mecánica y decisión aparte, ver punto 2 de
+   >    la tarjeta anterior (extender el hash a `_tick_rail()` sigue en pie,
+   >    esto no lo reemplaza).
+   > 4. Verificación: mismo escenario de la sección 15 (100 torres,
+   >    `real-stats`, dos puntos de `stress-fire-rate`) — objetivo, limpiar
+   >    60fps de piso — más regresión estándar completa. Si el piso limpia
+   >    sin tocar el hash para los proj-spawning types, esa parte del punto
+   >    1 de la tarjeta anterior queda innecesaria — no implementarla por
+   >    las dudas, confirmarlo con este mismo dato primero.
 
 **Fase 2 queda cerrada del lado de motor — los 4 puntos cumplidos (09-ago,
 Dirección), cierre confirmado, no revertido.** Lo que sigue en vuelo (ronda
