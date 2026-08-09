@@ -147,6 +147,15 @@ func _parse_cli_args() -> void:
 					# Coloca una torre tipo 0 (con sprite) y una tipo 1 (sigue
 					# en color plano) juntas, como piso de comparación de tamaño.
 					_run_sprite_test(parts[1])
+				"sprite-test-mipmap-filter":
+					# Igual que sprite-test, pero fuerza texture_filter a
+					# LINEAR_WITH_MIPMAPS en el tipo 0 — diagnóstico puntual
+					# para aislar si el default del proyecto (Linear, sin
+					# mipmaps) es lo que neutraliza mipmaps/generate=true del
+					# .import, no el contenido del asset. Ver
+					# EntityRenderSync.set_texture_filter().
+					_run_sprite_test(parts[1])
+					_tower_render.set_texture_filter_for_type(0, CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS)
 				"orientation-test":
 					# Diagnóstico puntual (09-ago): ¿el MultiMesh de
 					# EntityRenderSync orienta distinto que un Sprite2D común?

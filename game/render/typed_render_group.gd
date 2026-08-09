@@ -41,6 +41,10 @@ func set_sprite_for_type(type_id: int, idle: Texture2D, walk: Texture2D, interva
 func set_flip_h_for_type(type_id: int, flip: bool) -> void:
 	_stores[type_id].set_flip_h(flip)
 
+## Ver EntityRenderSync.set_texture_filter() — diagnóstico puntual de mipmaps.
+func set_texture_filter_for_type(type_id: int, filter: CanvasItem.TextureFilter) -> void:
+	_stores[type_id].set_texture_filter(filter)
+
 ## Particiona positions[0..count) por type_ids[i] y hace un sync() por
 ## sub-store. Asigna un PackedVector2Array por frame por type_id presente —
 ## a diferencia del hash espacial (docs/fase2-benchmark-conjunto.md), acá

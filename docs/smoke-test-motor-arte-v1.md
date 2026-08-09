@@ -295,3 +295,78 @@ barato correrlo ahora que como palanca de emergencia después de una ronda 4.
 **No hay decisión de Director/PM pendiente acá** — ambas tarjetas son
 independientes entre sí y de bajo costo; correrlas en paralelo es el default
 razonable, no algo que necesite aprobación aparte.
+
+## 11. Resultado — tarjeta de Motor/Mesa de Developers (mipmaps, 09-ago)
+
+**Hallazgo principal: `mipmaps/generate=true` solo, sin más, no cambia
+nada.** El resultado inicial (mismo método de la sección 3, mismo asset,
+solo el `.import` tocado) fue visualmente indistinguible de la sección 8 —
+confirmado con una métrica de ruido pixel-a-pixel (variación total de
+luminancia entre vecinos, sobre el recorte 36×36 real): **11.97 sin mipmaps
+vs. 12.06 con mipmaps, -0.7%**, dentro de ruido de medición. Antes de
+concluir "los mipmaps no sirven acá" — que hubiera sido la lectura fácil —
+paré a preguntar *por qué* no había ningún cambio, en vez de aceptar el
+número al primer intento (mismo criterio que ya costó caro con el bug de
+fire_rate=0.0 de la sección 6 de `fase2-benchmark-conjunto.md`: dos cosas
+que se cancelan o, acá, una que directamente no está actuando, dan un
+resultado que "parece" concluyente sin serlo).
+
+**Causa: el proyecto nunca usa los mipmaps que genera.** `game/project.godot`
+no tiene `rendering/textures/canvas_textures/default_texture_filter` — corre
+con el default de Godot 4, **Linear sin mipmaps**. Generar la cadena de
+mipmaps en el `.import` no alcanza si ningún `texture_filter` en el árbol de
+render los muestrea; es exactamente el mismo tipo de trampa que la nota
+técnica de la sección 9 ya avisaba de pasada, pero resultó ser la causa
+completa del "sin cambio", no un matiz menor.
+
+**Verificación con la variable aislada correctamente:** agregué
+`EntityRenderSync.set_texture_filter()` /
+`TypedRenderGroup.set_texture_filter_for_type()` (diagnóstico, no cambia el
+default del juego — hace falta llamarlo a mano) y forcé
+`TEXTURE_FILTER_LINEAR_WITH_MIPMAPS` en el tipo 0 para una tercera corrida
+(`sprite-test-mipmap-filter=...`, mismo asset con mipmaps ya generados).
+Resultado, mismo recorte 36×36:
+
+| Variante | Ruido pixel-a-pixel (TV) | Luminancia media |
+|---|---|---|
+| Sin mipmaps (sección 8) | 11.97 | 89.3 |
+| Con mipmaps, filtro default (Linear) | 12.06 (+0.7%) | 89.4 |
+| Con mipmaps + filtro `LINEAR_WITH_MIPMAPS` | **3.33 (-72.2%)** | 89.1 |
+
+Comparación visual, mismo recorte, izquierda a derecha (sin mipmaps / con
+mipmaps sin filtro / con mipmaps + filtro):
+`sprite_test_compare_3way.png`.
+
+**Con el filtro realmente activo, sí hay una mejora real y visible** —no
+solo en el número. La silueta deja de leerse como ruido de alta frecuencia
+y colapsa en formas más coherentes (masa de cuerpo + patas reconocibles sin
+esfuerzo); el contraste duro entre line-art negro y cuerpo gris se suaviza,
+así que el gris acero deja de quedar "enterrado" por líneas negras aisladas.
+Dato honesto en contra de leerlo como solución completa: la **luminancia
+media no cambia** (89.3 → 89.1) — el mipmap no aclara el tono general, solo
+redistribuye el contraste local. Y hay un costo: el cañón y el contorno
+pierden nitidez (blur real, no solo menos ruido) — un poco de la lectura de
+"silueta mecánica definida" se cambia por "silueta más limpia pero más
+blanda". No corrí un criterio de aceptación formal (las 3 preguntas de la
+sección 4) sobre esta variante — es la misma torreta ronda 2 con el mismo
+problema de fondo (acabado pintado a 26px), no una torreta nueva; falta el
+juicio de Arte/Director sobre si "más limpio pero más blando" es una mejora
+neta o un intercambio que no vale la pena.
+
+**No cambia el veredicto de la sección 8** (sigue "no pasa", ronda 3 en
+curso) — pero sí cambia el dato que alimentaba la sección 9: la palanca de
+mipmaps **no es gratis como "solo tocar el `.import`"** (eso no hace nada),
+pero **si se activa correctamente (`texture_filter` + `mipmaps/generate`),
+sí mueve la aguja de forma medible**, no es un descarte. Si la ronda 3 no
+alcanza, esto queda como palanca de motor con datos reales detrás, no una
+hipótesis sin probar — y es independiente del cambio de preámbulo de la
+ronda 3 (sección 10), se pueden evaluar juntas sobre la misma muestra
+cuando esté.
+
+**Costo:** cero créditos de Arte, ~15 minutos, sin tocar el default de
+`texture_filter` del proyecto (queda gateado detrás de
+`sprite-test-mipmap-filter=` para no afectar nada del juego real todavía).
+Vuelve al director/PM para decidir si vale la pena setear
+`default_texture_filter` a nivel de proyecto (afecta a las 20 torretas del
+catálogo, no solo esta) o dejarlo por torreta cuando cada una tenga sprite
+— esa es una decisión de alcance, no de motor.

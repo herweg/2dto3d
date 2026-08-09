@@ -226,3 +226,47 @@ gastando créditos:**
 > el motor ya resuelve gratis.** Pasa a Mesa de Developers/Director: correr
 > el smoke test de la sección 4 con esta misma imagen (cuerpo de Torreta
 > Recta) antes de pedir más generaciones.
+
+---
+
+## 6. Ronda 3 — prompt único listo, esperando corrida (09-ago, tarjeta de commit `737b11a`)
+
+El smoke test de motor sí se corrió (`docs/smoke-test-motor-arte-v1.md`,
+secciones 7-8) — no pasó, y en el camino encontró y corrigió un bug real de
+motor ajeno al arte (sprites invertidos 180° en `MultiMeshInstance2D` por
+un desajuste de convención de eje Y entre `QuadMesh` y Godot 2D, ya
+arreglado en `entity_render_sync.gd`). Con la orientación corregida, la
+silueta mejoró pero el color de firma siguió sin leerse a 26px — y el
+coordinador encontró la causa raíz exacta que a mí se me había pasado en
+la ronda 2: el preámbulo pedía **"bold, clean dark outlines"**, y eso es
+lo que enterraba el gris acero bajo el line-art, independiente del
+detalle pintado que yo había señalado como sospechoso principal.
+
+**Ya actualicé `prompts-arte-torretas-v1.md`:** el preámbulo de la sección
+A trae ese fix fusionado con el ajuste de flat-anchoring que ya había
+dejado redactado en la sección 5 de este documento (outline fino y
+secundario al relleno, 2-3 tonos planos, sin gradiente/AO/especular/
+bisel/desgaste). Y agregué, en la entrada de Torreta Recta (sección B),
+un bloque único con preámbulo + cuerpo ya concatenados — la tarjeta pedía
+explícitamente "un solo paste", no dos bloques para armar a mano.
+
+**Sigue pendiente de correr** — no tengo forma de generar la imagen yo
+mismo. Cuando el usuario tenga créditos, es ese bloque único, tal cual,
+sin editar.
+
+**Cómo se interpreta el resultado, ya acordado con el coordinador** (para
+no tener que decidirlo de nuevo cuando llegue la imagen):
+- **Si pasa** (silueta y color de firma se leen bien a 26px): mismo
+  preámbulo corregido se usa para el resto del catálogo de 20 sin más
+  ajustes de estilo.
+- **Si vuelve a fallar el color de firma puntualmente** (no la silueta, no
+  el detalle pintado — específicamente el color): ya no es un problema de
+  prompt. Sería evidencia de que el color de firma de esta torreta en
+  particular (blanco/gris claro) tiene poco contraste inherente contra
+  cualquier outline+sombra a 26px, y ahí correspondería replantear el
+  criterio de color por torreta (`docs-torretas-diseno.md`), no otra
+  ronda de prompt.
+- Motor está probando en paralelo, sin depender de este resultado, si
+  `mipmaps/generate=true` explica parte de la pérdida de nitidez
+  (`smoke-test-motor-arte-v1.md` sección 9) — dato complementario, no
+  sustituye la ronda 3.

@@ -118,6 +118,46 @@ steel-white (#C9D3D8-ish) rim-light tracing the silhouette edge and a
 small steel-white indicator light on the chassis. No other color accents.
 ```
 
+**Ronda 3 — prompt único, preámbulo + cuerpo ya fusionados (tarjeta Arte,
+commit `737b11a`).** El smoke test de motor (`docs/smoke-test-motor-arte-v1.md`
+secciones 7-8) encontró que a 26px reales el color de firma no se leía —
+causa raíz: el preámbulo viejo pedía "bold, clean dark outlines", y eso
+enterraba el gris acero bajo el line-art, independiente del detalle
+pintado. El preámbulo de la sección A ya está corregido (outline fino y
+secundario al relleno). Este bloque es el mismo cuerpo de arriba con el
+preámbulo nuevo ya pegado — un solo paste, no hace falta armar el
+concatenado a mano:
+```
+2D game asset, flat vector illustration / sticker-icon style — solid flat
+color fills only, no shading gradients, no ambient occlusion, no specular
+highlights, no drop shadow, no bevel, no weathering or grunge texture
+noise. Think flat mobile-game icon, not a rendered 3D asset. Thin, minimal
+outline only where needed to separate the silhouette from the background —
+the outline must be visually secondary to the fill: never heavier or
+darker-and-thicker than the flat fill color, because the fill color (not
+the outline) is what has to read as the turret's signature color at a
+glance. 2-3 flat color tones maximum. Strong, simple, instantly readable
+silhouette designed to read clearly at very small on-screen size (roughly
+20-40px tall in the final game — the real in-game render is 26px).
+Elevated 3/4 side view (not top-down, not full side profile), static
+neutral pose, no implied walking or facing direction. A stationary
+ground-mounted weapon emplacement bolted to its base, like a fixed
+artillery/gun turret — NOT a robot, NOT bipedal, NOT a humanoid mech or
+character, no legs, no arms, no face. Rugged industrial sci-fi
+frontier-outpost material language: worn rusted metal, riveted armor
+plating, weathered dark surfaces, exposed rivets and panel seams — NOT
+clean/pristine sci-fi, NOT organic or biological. Transparent background
+(PNG alpha). No ground shadow baked in, no text, no watermark, no UI, no
+frame or border. Square canvas, subject centered, filling about 70-75% of
+frame height.
+
+A compact fixed defense turret, boxy angular chassis on a short tripod
+base, a single forward-facing autocannon barrel, steel-grey and off-white
+metal plating with dark grey mechanical joints, a thin glowing pale
+steel-white (#C9D3D8-ish) rim-light tracing the silhouette edge and a
+small steel-white indicator light on the chassis. No other color accents.
+```
+
 **Base `[sprite]`** — corregido tras ronda 1 (ver
 `docs/qa-prueba-assets-v1.md`): salió con remaches y brillo especular pese
 al pedido de "minimalist", agrego la cláusula de simplificación explícita

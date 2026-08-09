@@ -110,6 +110,16 @@ func advance_animation(delta: float) -> void:
 func set_flip_h(flip: bool) -> void:
 	_flip_h = flip
 
+## Diagnóstico puntual (mipmaps, 09-ago): el project.godot de esta pantalla
+## no tiene `rendering/textures/canvas_textures/default_texture_filter`
+## seteado — corre con el default de Godot 4 (Linear, sin mipmaps). Generar
+## la cadena de mipmaps en el .import no alcanza si el filtro en tiempo de
+## render nunca la muestrea; esto fuerza el filtro por store para poder
+## aislar esa variable en la comparación. No se usa en el juego real todavía
+## (el default sigue siendo el que ya está).
+func set_texture_filter(filter: CanvasItem.TextureFilter) -> void:
+	_mmi.texture_filter = filter
+
 ## Empaqueta positions[0..count) (+ color por type_ids, si se llamó
 ## set_type_colors) en el buffer plano y hace una sola escritura a
 ## RenderingServer. Sin rotación por instancia todavía — _ORIENT_FIX/_flip_h
