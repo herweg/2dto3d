@@ -77,6 +77,40 @@ todavía abierto (revisión de Dirección, 09-ago):**
    a la vez a través de `TypedRenderGroup` en `mode=joint`, población
    completa. Tarjeta para Mesa de Developers, sin costo de créditos de
    Arte.
+   > **Mesa de Developers, 09-ago — tarjeta ejecutada, resultado en
+   > `fase2-benchmark-conjunto.md` sección 11.** Costo chico pero
+   > consistente (~2fps / ~3% de promedio en 3 pares baseline/texturizado,
+   > mismo sentido las 3 veces), piso sin diferencia medible — no pone en
+   > riesgo el objetivo. Dato listo para que Dirección/PM decida si esto
+   > cierra el punto o hace falta algo más — no lo cierro yo acá, ver la
+   > nota de alcance al principio de este documento.
+   >
+   > **Dirección, 09-ago — el costo incremental queda aceptado, el punto
+   > sigue sin cerrar por una razón distinta.** El ~3% de las 8 texturas
+   > está bien medido y no es el problema. Lo que no cierra es el piso en
+   > sí: `fase2-benchmark-conjunto.md` sección 11 reporta 51.3fps/50.4fps
+   > como **promedio de los pisos** de las 3 corridas — no el piso de cada
+   > corrida por separado. La sección 8 (la corrida histórica que sí valida
+   > Fase 2) puso la barra en el mínimo de cada muestra ("cero muestras bajo
+   > 60"), no en un promedio; esta sección la corre contra el promedio
+   > ("ambas condiciones se sostienen cómodas arriba de 60fps de promedio")
+   > sin marcar que es una vara distinta. Y el mismo número (~51fps de piso)
+   > ya había aparecido hoy en la revisión de T4 de `definicion-escala-v1.md`
+   > en una corrida de `mode=joint` sin ningún cambio de por medio, etiquetado
+   > ahí como "varianza de medición... no regresión" sin verificarlo. Dos
+   > apariciones del mismo número en el mismo día sin investigar todavía es
+   > una coincidencia que vale mirar, no una explicación.
+   >
+   > **Pido el desglose de piso por corrida** (probablemente ya está en los
+   > CSV de `BenchmarkLogger` de las 6 corridas de hoy, no hace falta volver
+   > a correr nada) — si las 6 rondan holgadas por encima de 60 y solo el
+   > promedio se ve arrastrado por una corrida puntual, cierro el punto sin
+   > más trámite. Si "varias muestras bajo 60" del comentario de T4 se repite
+   > en más de una corrida de las 6, eso es una inconsistencia del piso de
+   > `mode=joint` en sí — anterior a esta tarjeta y a la migración BEAM, no
+   > causada por las texturas — y ameritaría entender la causa (¿la fase de
+   > rampa del spawner realmente termina antes de que arranque la medición
+   > de piso, o no?) antes de dar Fase 2 por cerrada del lado de motor.
 
 **Fase 2 queda cerrada del lado de motor cuando el punto 4 también esté
 hecho — no antes.** Los otros tres ya lo están; este es el único que falta

@@ -187,6 +187,21 @@ var _vfx_scale_overdraw_added := 0
 var _targeting_variant_arg := "nearest"
 var _targeting_cooldowns: PackedFloat32Array
 
+## Tarjeta de cierre de Fase 2, punto 4 (plan-fases.md) — ningún banco corrido
+## hasta ahora ejercita el camino de render que van a usar las 20 torretas
+## con sprite propio: TypedRenderGroup, un MultiMeshInstance2D (y un bind de
+## textura) por type_id presente, no uno solo compartido como hace
+## _tower_render (EntityRenderSync + set_type_colors()) en el resto de los
+## modos. tower-sprite-test=1 reemplaza _tower_render por un
+## TypedRenderGroup en mode=joint, reusando torreta_recta_v2.png (ya
+## recortado/cuadrado, sección 14 de smoke-test-motor-arte-v1.md) asignado a
+## los 8 type_id — misma imagen en los 8, pero 8 binds de textura reales, no
+## uno solo, que es el costo que interesa medir. Sin costo de créditos de
+## Arte — reusa el placeholder que ya existía para la sección 8.
+var _tower_sprite_test_arg := false
+var _tower_render_typed: TypedRenderGroup
+const TOWER_SPRITE_TEST_TEX := "res://assets/torreta_recta_v2.png"
+
 func _ready() -> void:
 	# Sin esto, a poblacion baja (mode=vfx-scale, escalones iniciales) el
 	# frame time mide el refresco del monitor (144Hz acá), no el motor — un
@@ -217,16 +232,24 @@ func _ready() -> void:
 
 	_enemy_render = EntityRenderSync.new(MAX_ENEMIES, 14.0, Color(0.75, 0.15, 0.15))
 	_proj_render = EntityRenderSync.new(MAX_PROJ, 6.0, Color(1.0, 0.9, 0.3))
-	_tower_render = EntityRenderSync.new(MAX_TOWERS, 16.0, Color(0.25, 0.35, 0.55))
 	var type_colors := [
 		Color(0.30, 0.55, 0.95), Color(0.95, 0.55, 0.15), Color(0.65, 0.35, 0.85), Color(0.15, 0.75, 0.70),
 		Color(0.85, 0.25, 0.25), Color(0.90, 0.55, 0.20), Color(0.95, 0.95, 0.30), Color(0.60, 0.60, 0.65),
 	]
 	_proj_render.set_type_colors(type_colors)
-	_tower_render.set_type_colors(type_colors)
 	add_child(_enemy_render.get_node2d())
 	add_child(_proj_render.get_node2d())
-	add_child(_tower_render.get_node2d())
+
+	if _tower_sprite_test_arg:
+		_tower_render_typed = TypedRenderGroup.new(TowerStore.TOWER_TYPE_STATS.size(), MAX_TOWERS, 16.0, type_colors)
+		var tex := load(TOWER_SPRITE_TEST_TEX)
+		for t in TowerStore.TOWER_TYPE_STATS.size():
+			_tower_render_typed.set_sprite_for_type(t, tex, tex)
+		_tower_render_typed.add_all_to(self)
+	else:
+		_tower_render = EntityRenderSync.new(MAX_TOWERS, 16.0, Color(0.25, 0.35, 0.55))
+		_tower_render.set_type_colors(type_colors)
+		add_child(_tower_render.get_node2d())
 
 	if _sprite_arg and _mode == "enemies":
 		var atlas := SpriteAtlas.new(SPRITE_SHEET)
@@ -520,6 +543,8 @@ func _parse_cli_args() -> void:
 				_vfx_scale_fx = parts[1] == "1"
 			"targeting-variant":
 				_targeting_variant_arg = parts[1]
+			"tower-sprite-test":
+				_tower_sprite_test_arg = parts[1] == "1"
 
 func _current_target() -> int:
 	return _levels[_level_idx]
@@ -660,7 +685,10 @@ func _process(delta: float) -> void:
 		_enemy_render.advance_animation(delta)
 	_enemy_render.sync(_enemy_store.positions, _enemy_store.active_count)
 	_proj_render.sync(_proj_store.positions, _proj_store.active_count, _proj_store.type_id)
-	_tower_render.sync(_tower_store.positions, _tower_store.active_count, _tower_store.type_id)
+	if _tower_render_typed:
+		_tower_render_typed.sync(_tower_store.positions, _tower_store.type_id, _tower_store.active_count)
+	else:
+		_tower_render.sync(_tower_store.positions, _tower_store.active_count, _tower_store.type_id)
 
 	_logger.tick(delta, _proj_store.active_count, _enemy_store.active_count)
 	_maybe_screenshot()

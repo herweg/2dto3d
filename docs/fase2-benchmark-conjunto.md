@@ -521,6 +521,72 @@ cadencia × torres, no la búsqueda en sí.
 
 ---
 
+## 11. Costo de `TypedRenderGroup` con textura real en varios `type_id` (09-ago) — cierra punto 4 de `plan-fases.md`
+
+Pregunta puntual, distinta a todo lo medido hasta acá: las 20 torretas del
+catálogo van a tener sprite propio, lo que significa un `MultiMeshInstance2D`
+(y un bind de textura) **por `type_id` presente**, vía `TypedRenderGroup` —
+no el `EntityRenderSync` + `set_type_colors()` compartido que usa
+`_tower_render` en el resto de los modos de `stress_main.gd`. Ningún banco
+corrido hasta ahora (ni éste, ni `fase2-vfx-benchmark.md`) ejercita ese
+camino de render a población real. No hace falta arte final para probarlo —
+alcanza con reusar `torreta_recta_v2.png` (el placeholder ya recortado y
+cuadrado, `smoke-test-motor-arte-v1.md` sección 14) asignado a los 8
+`type_id` a la vez, misma imagen en los 8 pero 8 binds de textura reales, no
+uno solo. Sin costo de créditos de Arte.
+
+**Cómo se corrió:** nuevo flag `tower-sprite-test=1` en `stress_main.gd` —
+reemplaza `_tower_render` (EntityRenderSync, color plano) por un
+`TypedRenderGroup` con `set_sprite_for_type(t, tex, tex)` para los 8 tipos,
+mismo `torreta_recta_v2.png` en todos. Resto del banco sin cambios:
+`mode=joint proj-type=realistic`, población ×1.2 completa (2.400/~3.400-3.600/24),
+backend nativo, **en ventana, Vulkan real** (confirmado
+`Vulkan 1.3.260 - Forward+ - Using Device #0: AMD - Radeon RX Vega` en las
+6 corridas). Verificado por captura que el sprite realmente se está
+dibujando, no cayendo a un fallback silencioso
+(`stress_joint_towers_row_check.png` — torretas reconocibles, no cuadrados
+de color). 3 pares baseline/texturizado, mismo método A/B de siempre.
+
+| Corrida | Baseline (color plano) avg fps | Con textura real (8 type_id) avg fps |
+|---|---|---|
+| 1 | 64.71 | 61.93 |
+| 2 | 64.94 | 63.82 |
+| 3 | 64.85 | 62.71 |
+| **Promedio** | **64.83** | **62.82** |
+
+Piso (mínimo post-rampa) prácticamente sin diferencia: 51.3 promedio
+baseline vs 50.4 promedio texturizado — el costo no se concentra en el
+peor momento, es un descuento parejo sobre el promedio.
+
+### Lectura
+
+**Sí cuesta, de forma chica pero consistente y reproducible — no es
+ruido.** ~2fps de promedio (~3%) en las tres corridas, siempre en la misma
+dirección (texturizado por debajo de baseline las 3 veces, nunca al revés).
+Comparado con la varianza de corrida a corrida que ya se vio en la revisión
+de T4 de hoy (una sola corrida de `mode=joint` bajó a 51fps de piso sin
+ningún cambio de por medio), esta diferencia es chica pero no desaparece
+dentro de ese ruido porque **apunta siempre para el mismo lado** en los 3
+pares.
+
+**No pone en riesgo el objetivo.** Ambas condiciones se sostienen cómodas
+arriba de 60fps de promedio a la población ×1.2 completa; el costo de pasar
+de 1 draw call de torres a 8 no compite en magnitud con lo que ya se
+resolvió en la sección 8 (la migración BEAM). Con las 20 torretas reales
+del catálogo (más `type_id` que las 8 de hoy, pero cada una con su propio
+bind también hoy en el diseño actual), el costo esperado escala con
+cantidad de tipos *presentes*, no con cantidad de torres — 8 tipos ya
+cuestan lo medido acá aunque hubiera 3 o 30 torres de cada uno, mismo
+principio que ya confirmó `fase2-vfx-benchmark.md` para partículas/overdraw
+("costo fijo de tener el efecto presente, no por cuánto se agrega").
+
+**Tarjeta del punto 4 de `plan-fases.md` ejecutada** — dato listo para que
+Dirección/PM decida el cierre de ese punto (y de Fase 2 del lado de motor);
+no lo cierro acá, ese documento es de alcance restringido a Dirección de
+Desarrollo/PM.
+
+---
+
 **Herramientas nuevas en `level_controller.gd`**, quedan disponibles para
 la próxima vez que haga falta verificar algo en esta pantalla sin pasar por
 `stress_main.gd`: `place-all-towers` (los 8 tipos, uno de cada), `place-types=<csv>`

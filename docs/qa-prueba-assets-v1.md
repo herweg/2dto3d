@@ -270,3 +270,34 @@ no tener que decidirlo de nuevo cuando llegue la imagen):
   `mipmaps/generate=true` explica parte de la pérdida de nitidez
   (`smoke-test-motor-arte-v1.md` sección 9) — dato complementario, no
   sustituye la ronda 3.
+
+**Actualización, mismo día — feedback llegó antes que el crédito.** El
+usuario revisó de nuevo `...10_04_12...png` (ronda 2, la única generada
+hasta ahora) contra `...08_59_08...png` (ronda 1) y encontró un problema
+que ninguno de los dos — ni yo en la sección 5, ni el smoke test de motor —
+había señalado: **el cañón apunta en diagonal hacia abajo**, no horizontal;
+`08_59_08` sí lo tenía horizontal y queda marcada como referencia correcta
+de ángulo. Además se decidió la **convención de lado: izquierda por
+default** para todo el catálogo — no hay motivo técnico para preferir un
+lado en la generación, así que se elige por conveniencia de motor, ya que
+`set_flip_h()`/`set_flip_h_for_type()` (`smoke-test-motor-arte-v1.md`
+sección 8) ya están construidos para espejar a la derecha cuando haga
+falta sin volver a generar.
+
+Los tres ajustes (color/outline, ángulo de cañón, lado por default) quedan
+fusionados en un único bloque de preámbulo+cuerpo en
+`prompts-arte-torretas-v1.md`, sección B #1 — todavía **no corrido**, para
+no gastar una ronda de crédito por cada hallazgo por separado. Sigue siendo
+la ronda 3, no una ronda nueva: el bloque anterior nunca llegó a probarse.
+
+**Corrección propia, en el mismo día.** Mi primer arreglo del punto de
+arriba estaba mal: leí el ángulo diagonal como error de cámara y forcé
+"cámara a la altura de los ojos, no aérea" en el preámbulo. El usuario
+aclaró que es al revés — la cámara elevada, casi cenital (~70° de
+inclinación, más de arriba que de lateral) es la correcta desde el
+principio; lo único que había que arreglar era la **dirección** del cañón
+(que se lea recto a la izquierda en la imagen final), no la inclinación de
+la cámara. Revertido en `prompts-arte-torretas-v1.md` sección A — la
+cámara vuelve a ser elevada/cenital, con la corrección de dirección ya
+aplicada encima. Mismo patrón que la corrección de alfa de la sección 0:
+mejor registrar el error propio y el arreglo que dejarlo implícito.

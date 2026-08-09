@@ -37,6 +37,27 @@ directo en el preámbulo — aplica a las 20 torretas, no solo a la que falló
 el test, así que se corrige una vez acá en vez de pegarse aparte en cada
 prompt de acá en más.
 
+**Segunda revisión, 09-ago (feedback directo sobre la imagen de ronda 3) —
+y tercera revisión inmediata, corrigiendo mi propia corrección.** Había
+leído el cañón en diagonal como un error de cámara y lo arreglé forzando
+"a la altura de los ojos, no aérea". El usuario aclaró que es al revés: la
+cámara **sí** debe ser elevada, casi cenital — ~70° de inclinación, más de
+arriba que de lateral — eso no era el defecto, es la vista pensada desde el
+principio. Lo único que había que arreglar era la **dirección**: el cañón
+tiene que leerse apuntando recto a la izquierda en la imagen final (una
+convención de claridad de dirección de disparo, no una proyección de
+perspectiva estricta), independiente de lo elevada que esté la cámara.
+Revertido: la cámara vuelve a ser elevada, con la corrección de dirección
+ya aplicada. Además, faltaba fijar una convención de lado — se decide
+**izquierda como default del proyecto**: no hay motivo técnico para
+preferir un lado sobre el otro en la generación, así que se elige por
+conveniencia de motor: `EntityRenderSync`/`TypedRenderGroup` ya tienen
+`set_flip_h()` pensado exactamente para esto (`docs/smoke-test-motor-arte-v1.md`
+sección 8, agregado como "regalo" al arreglar el bug de orientación Y) — el
+arte se genera una sola vez mirando a la izquierda, y el espejado a la
+derecha (cuando haga falta) lo hace el motor, no una segunda generación.
+Los tres ajustes están fusionados en el preámbulo de abajo.
+
 ```
 2D game asset, flat vector illustration / sticker-icon style — solid flat
 color fills only, no shading gradients, no ambient occlusion, no specular
@@ -48,12 +69,20 @@ darker-and-thicker than the flat fill color, because the fill color (not
 the outline) is what has to read as the turret's signature color at a
 glance. 2-3 flat color tones maximum. Strong, simple, instantly readable
 silhouette designed to read clearly at very small on-screen size (roughly
-20-40px tall in the final game — the real in-game render is 26px).
-Elevated 3/4 side view (not top-down, not full side profile), static
-neutral pose, no implied walking or facing direction. A stationary
-ground-mounted weapon emplacement bolted to its base, like a fixed
-artillery/gun turret — NOT a robot, NOT bipedal, NOT a humanoid mech or
-character, no legs, no arms, no face. Rugged industrial sci-fi
+20-40px tall in the final game — the real in-game render is 26px). A steep
+top-down oblique camera, elevated roughly 70° above the horizon — closer to
+a bird's-eye view than an eye-level side view, showing mostly the top and a
+modest amount of the side of the turret. Despite this steep elevated
+camera, the main weapon barrel is drawn as a clean, straight horizontal
+line pointing toward the left edge of the frame — a stylized aim-direction
+convention for gameplay clarity, not strict perspective foreshortening.
+Static pose, no implied walking motion. Facing left is this project's
+default orientation for every single asset generated from this document —
+mirrored to face right in-engine via a horizontal flip when needed, never
+generate a right-facing version. A stationary ground-mounted weapon
+emplacement bolted to its base, like a
+fixed artillery/gun turret — NOT a robot, NOT bipedal, NOT a humanoid mech
+or character, no legs, no arms, no face. Rugged industrial sci-fi
 frontier-outpost material language: worn rusted metal, riveted armor
 plating, weathered dark surfaces, exposed rivets and panel seams — NOT
 clean/pristine sci-fi, NOT organic or biological. Transparent background
@@ -112,21 +141,27 @@ ritmo de disparo, no partícula nueva.
 **Cuerpo `[sprite]`**
 ```
 A compact fixed defense turret, boxy angular chassis on a short tripod
-base, a single forward-facing autocannon barrel, steel-grey and off-white
-metal plating with dark grey mechanical joints, a thin glowing pale
-steel-white (#C9D3D8-ish) rim-light tracing the silhouette edge and a
-small steel-white indicator light on the chassis. No other color accents.
+base, a single autocannon barrel pointing toward the left edge of the
+frame, perfectly horizontal, steel-grey and off-white metal plating with
+dark grey mechanical joints, a thin glowing pale steel-white (#C9D3D8-ish)
+rim-light tracing the silhouette edge and a small steel-white indicator
+light on the chassis. No other color accents.
 ```
 
-**Ronda 3 — prompt único, preámbulo + cuerpo ya fusionados (tarjeta Arte,
-commit `737b11a`).** El smoke test de motor (`docs/smoke-test-motor-arte-v1.md`
-secciones 7-8) encontró que a 26px reales el color de firma no se leía —
-causa raíz: el preámbulo viejo pedía "bold, clean dark outlines", y eso
-enterraba el gris acero bajo el line-art, independiente del detalle
-pintado. El preámbulo de la sección A ya está corregido (outline fino y
-secundario al relleno). Este bloque es el mismo cuerpo de arriba con el
-preámbulo nuevo ya pegado — un solo paste, no hace falta armar el
-concatenado a mano:
+**Ronda 3 — prompt único, preámbulo + cuerpo ya fusionados (todavía sin
+correr — feedback nuevo la alcanzó antes de gastar el crédito, dos veces).**
+La ronda 2 (`ChatGPT Image 9 ago 2026, 10_04_12 a.m.png`) corrigió la
+silueta anti-mech pero el cañón salió apuntando en diagonal hacia abajo — el
+usuario lo marcó comparándolo contra `ChatGPT Image 9 ago 2026, 08_59_08
+a.m.png` (ronda 1) como referencia correcta de dirección. Primer intento de
+arreglo (mío) forzaba cámara a la altura de los ojos — equivocado: la
+cámara elevada casi cenital (~70°) era la correcta desde el principio, lo
+único mal era la dirección del cañón, no la inclinación. Corregido en la
+sección A. Sumado al fix de color/outline y a la convención de lado
+(izquierda por default, espejado a la derecha vía `set_flip_h()` en motor —
+`docs/smoke-test-motor-arte-v1.md` sección 8), los ajustes quedan en un solo
+prompt para no gastar una ronda de crédito por cada hallazgo por separado.
+Preámbulo + cuerpo ya fusionados, un solo paste:
 ```
 2D game asset, flat vector illustration / sticker-icon style — solid flat
 color fills only, no shading gradients, no ambient occlusion, no specular
@@ -138,12 +173,20 @@ darker-and-thicker than the flat fill color, because the fill color (not
 the outline) is what has to read as the turret's signature color at a
 glance. 2-3 flat color tones maximum. Strong, simple, instantly readable
 silhouette designed to read clearly at very small on-screen size (roughly
-20-40px tall in the final game — the real in-game render is 26px).
-Elevated 3/4 side view (not top-down, not full side profile), static
-neutral pose, no implied walking or facing direction. A stationary
-ground-mounted weapon emplacement bolted to its base, like a fixed
-artillery/gun turret — NOT a robot, NOT bipedal, NOT a humanoid mech or
-character, no legs, no arms, no face. Rugged industrial sci-fi
+20-40px tall in the final game — the real in-game render is 26px). A steep
+top-down oblique camera, elevated roughly 70° above the horizon — closer to
+a bird's-eye view than an eye-level side view, showing mostly the top and a
+modest amount of the side of the turret. Despite this steep elevated
+camera, the main weapon barrel is drawn as a clean, straight horizontal
+line pointing toward the left edge of the frame — a stylized aim-direction
+convention for gameplay clarity, not strict perspective foreshortening.
+Static pose, no implied walking motion. Facing left is this project's
+default orientation for every single asset generated from this document —
+mirrored to face right in-engine via a horizontal flip when needed, never
+generate a right-facing version. A stationary ground-mounted weapon
+emplacement bolted to its base, like a
+fixed artillery/gun turret — NOT a robot, NOT bipedal, NOT a humanoid mech
+or character, no legs, no arms, no face. Rugged industrial sci-fi
 frontier-outpost material language: worn rusted metal, riveted armor
 plating, weathered dark surfaces, exposed rivets and panel seams — NOT
 clean/pristine sci-fi, NOT organic or biological. Transparent background
@@ -152,10 +195,11 @@ frame or border. Square canvas, subject centered, filling about 70-75% of
 frame height.
 
 A compact fixed defense turret, boxy angular chassis on a short tripod
-base, a single forward-facing autocannon barrel, steel-grey and off-white
-metal plating with dark grey mechanical joints, a thin glowing pale
-steel-white (#C9D3D8-ish) rim-light tracing the silhouette edge and a
-small steel-white indicator light on the chassis. No other color accents.
+base, a single autocannon barrel pointing toward the left edge of the
+frame, perfectly horizontal, steel-grey and off-white metal plating with
+dark grey mechanical joints, a thin glowing pale steel-white (#C9D3D8-ish)
+rim-light tracing the silhouette edge and a small steel-white indicator
+light on the chassis. No other color accents.
 ```
 
 **Base `[sprite]`** — corregido tras ronda 1 (ver
