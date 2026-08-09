@@ -593,3 +593,39 @@ de Arte, no artefacto de render.
 
 **Regresión:** `place-all-towers real-stats` headless, limpio (torres: 8,
 muertes: 7, leaks: 0).
+
+## 15. Corrección: el enum de la sección 13 estaba al revés (09-ago, director)
+
+**La sección 13 quedó con el valor equivocado.** El razonamiento que
+justificaba `3` ("este enum no incluye Parent Node, de ahí el corrimiento
+de +1") parte de una premisa falsa — sí lo incluye, en `value=4`, con
+`MAX` en `5`. Verificado contra dos fuentes independientes antes de tocar
+nada (no acepté la primera respuesta): la referencia renderizada
+(`docs.godotengine.org/en/stable/classes/class_viewport.html`) y el XML
+fuente crudo (`doc/classes/Viewport.xml` en el repo de Godot, rama
+`master`) — las dos coinciden en el mismo orden:
+
+```
+DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST = 0
+DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR = 1
+DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS = 2
+DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS = 3
+DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_PARENT_NODE = 4
+DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_MAX = 5
+```
+
+`3` es **Nearest (Mipmaps)** — filtrado en bloque sin suavizado bilineal,
+no el `Linear (Mipmaps)` que sí se validó en la sección 11 (el que dio
+-72% de ruido). `game/project.godot` corregido a `2`.
+
+**Por qué esto no invalida la re-confirmación de T4 en
+`definicion-escala-v1.md`:** esa medición comparaba fps con-filtro contra
+sin-filtro, y `NEAREST_WITH_MIPMAPS` es, si acaso, más barato de muestrear
+que `LINEAR_WITH_MIPMAPS` (menos texeles por sample), no más caro — el
+"sin caída medible" sigue siendo válido para el eje de costo. Lo que sí
+cambia: el resultado **visual** que estuvo activo hasta ahora (bloques
+nítidos sin suavizar) no es el que se midió como mejora en la sección 11
+(suavizado, con el trade-off de nitidez ya documentado ahí). Cualquier
+evaluación de ronda 3 hecha bajo el valor `3` habría estado juzgando el
+filtro equivocado — no se llegó a usar para eso todavía, así que no hay
+nada que re-hacer, solo corregir antes de que la ronda 3 llegue.
