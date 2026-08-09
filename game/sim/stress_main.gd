@@ -187,6 +187,15 @@ var _vfx_scale_overdraw_added := 0
 var _targeting_variant_arg := "nearest"
 var _targeting_cooldowns: PackedFloat32Array
 
+## Diagnóstico puntual (09-ago, revisión de Dirección sobre el piso de
+## mode=joint) — get_viewport().get_texture().get_image() en
+## _maybe_screenshot() es una lectura síncrona de GPU, candidata obvia a
+## explicar un dip de fps at momento fijo (t=5.0s, primer elemento de
+## _shot_times para mode=joint). no-screenshot=1 lo saltea por completo
+## (además del corte ya existente por headless) para poder aislar la
+## variable sin tocar nada más del benchmark.
+var _no_screenshot_arg := false
+
 ## Tarjeta de cierre de Fase 2, punto 4 (plan-fases.md) — ningún banco corrido
 ## hasta ahora ejercita el camino de render que van a usar las 20 torretas
 ## con sprite propio: TypedRenderGroup, un MultiMeshInstance2D (y un bind de
@@ -545,6 +554,8 @@ func _parse_cli_args() -> void:
 				_targeting_variant_arg = parts[1]
 			"tower-sprite-test":
 				_tower_sprite_test_arg = parts[1] == "1"
+			"no-screenshot":
+				_no_screenshot_arg = parts[1] == "1"
 
 func _current_target() -> int:
 	return _levels[_level_idx]
@@ -709,7 +720,7 @@ func _process(delta: float) -> void:
 			_finish()
 
 func _maybe_screenshot() -> void:
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" or _no_screenshot_arg:
 		return
 	for t in _shot_times:
 		if _elapsed >= t and not _shots_taken.has(t):

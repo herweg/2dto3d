@@ -301,3 +301,14 @@ la cámara. Revertido en `prompts-arte-torretas-v1.md` sección A — la
 cámara vuelve a ser elevada/cenital, con la corrección de dirección ya
 aplicada encima. Mismo patrón que la corrección de alfa de la sección 0:
 mejor registrar el error propio y el arreglo que dejarlo implícito.
+
+**Revisión del Auditor (commit `3f81cf3`).** Confirma el estado de Arte
+como "bien encaminado", documentación de la ronda 3 (dirección de cañón,
+no ángulo de cámara, más convención de lado) incluida la corrección a
+medio camino. Aclara correctamente el alcance: esto todavía no son los
+prompts de las 20 torretas, es la convención compartida que el resto va a
+heredar — sigue sin haber nada nuevo para Arte más allá de correr el
+bloque único de ronda 3 (sección B #1 de `prompts-arte-torretas-v1.md`)
+cuando haya crédito. El resto de esa revisión (punto 4, piso de
+`mode=joint` en el benchmark conjunto) es de Motor/Auditor —
+`docs/plan-fases.md`, no de este documento.

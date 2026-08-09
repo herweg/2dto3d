@@ -111,6 +111,66 @@ todavía abierto (revisión de Dirección, 09-ago):**
    > causada por las texturas — y ameritaría entender la causa (¿la fase de
    > rampa del spawner realmente termina antes de que arranque la medición
    > de piso, o no?) antes de dar Fase 2 por cerrada del lado de motor.
+   >
+   > **Mesa de Developers, 09-ago — desglose hecho, no fue una corrida
+   > arrastrando el promedio: las 6 tienen muestras bajo 60fps** (2/25,
+   > 2/25, 2/24 en baseline; 5/23, 4/24, 6/24 en texturizado — tabla completa
+   > en `fase2-benchmark-conjunto.md` sección 11). Investigué la causa en
+   > vez de repetir el error de hoy con T4 (etiquetar "varianza" sin
+   > verificar). Dos causas, no una:
+   >
+   > 1. **Confirmada:** `_maybe_screenshot()` hace una lectura síncrona de
+   >    GPU a `t=5.0s` fijo — coincide exacto con la peor muestra de las 6
+   >    corridas (49.3-53.6fps, todas en `elapsed≈5.0-5.5s`). Corrida de
+   >    control con la captura desactivada (`no-screenshot=1`, flag nuevo):
+   >    esa muestra desaparece, el piso sube a 56-57fps.
+   > 2. **Hipótesis fuerte, no aislada al 100%:** con la captura ya
+   >    descartada, sigue habiendo un dip más chico (56-59fps) cada
+   >    ~2.1-2.2s, presente por igual con y sin las texturas de esta
+   >    tarjeta — correlaciona con caídas periódicas de `proj_count` en el
+   >    mismo CSV, consistente con ráfagas de reposición del inyector
+   >    sintético (`_top_up_projectiles()`) después de que un lote de
+   >    proyectiles spawneados juntos durante la rampa expira junto. Mismo
+   >    espíritu que el hallazgo de PROJ_ZONE de la sección 2 — probable
+   >    artefacto del método del arnés, no necesariamente costo del juego
+   >    real — pero no instrumenté el conteo de spawns por frame para
+   >    confirmarlo de forma directa, así que lo dejo como hipótesis fuerte,
+   >    no hecho cerrado.
+   >
+   > **La causa 2 afecta por igual a baseline y texturizado, así que no
+   > invalida el ~3% de costo incremental de las 8 texturas** (esa
+   > comparación A/B sigue en pie) — pero sí significa que, con el mismo
+   > estándar que cerró la sección 8 (cero muestras bajo 60), ninguna de
+   > las 6 corridas de hoy cierra limpio todavía, con o sin las texturas de
+   > esta tarjeta. No cierro el punto 4 ni Fase 2 — dato completo para que
+   > Dirección/PM decida si esto alcanza (el promedio no está en riesgo, la
+   > causa 1 ya no aplica en juego real porque `Level1.tscn` no hace
+   > capturas de pantalla) o si vale la pena aislar la causa 2 del todo
+   > antes de cerrar.
+   >
+   > **Dirección, 09-ago.** Esta sí es la investigación que pedía — Causa 1
+   > queda aceptada como cerrada (correlación de timing exacta más corrida
+   > de control aislándola, no una historia sin verificar) y es irrelevante
+   > para el juego real por construcción: `_maybe_screenshot()` es exclusivo
+   > de `stress_main.gd`, `Level1.tscn` nunca lo llama. Buena disciplina de
+   > proceso también — citaron su propio error de hoy con T4 en vez de
+   > repetirlo. Vale seguir así.
+   >
+   > **No cierro todavía, por un paso más — barato, no una reapertura.**
+   > Causa 2 tiene la misma propiedad que la Causa 1 (`_top_up_projectiles()`
+   > también es exclusivo del arnés sintético — el juego real nunca repone
+   > población a un objetivo fijo, cada torre dispara a su propia cadencia
+   > independiente), pero sigue en "hipótesis fuerte", no confirmada. En vez
+   > de pedir instrumentar conteo de spawns por frame dentro del arnés
+   > (seguir puliendo una herramienta sintética), pido el chequeo más directo:
+   > correr la misma población por `Level1.tscn` (que ya tiene
+   > `BenchmarkLogger` cableado detrás de `stress-test`, no hace falta
+   > construir nada) y ver si el dip periódico de ~2.1s aparece ahí también.
+   > Si no aparece — el camino de producción real no tiene el patrón, tal
+   > como predice la Causa 2 — cierro el punto 4 y Fase 2 del lado de motor
+   > con ese dato, sin otra ronda. Si aparece igual en `Level1.tscn`, es un
+   > hallazgo real de motor y no un artefacto del arnés, y ahí sí ameritaría
+   > mirarlo a fondo antes de cerrar.
 
 **Fase 2 queda cerrada del lado de motor cuando el punto 4 también esté
 hecho — no antes.** Los otros tres ya lo están; este es el único que falta

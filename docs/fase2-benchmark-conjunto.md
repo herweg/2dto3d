@@ -554,27 +554,93 @@ de color). 3 pares baseline/texturizado, mismo método A/B de siempre.
 | 3 | 64.85 | 62.71 |
 | **Promedio** | **64.83** | **62.82** |
 
-Piso (mínimo post-rampa) prácticamente sin diferencia: 51.3 promedio
-baseline vs 50.4 promedio texturizado — el costo no se concentra en el
-peor momento, es un descuento parejo sobre el promedio.
+**Corrección (Dirección, 09-ago): el piso reportado abajo originalmente era
+un promedio de los pisos de cada corrida, no el piso de cada corrida por
+separado** — la misma vara que ya usaba la sección 8 (cero muestras bajo
+60) no se aplicó acá sin avisar que era un criterio distinto. Desglose real,
+sin volver a correr nada (los CSV de `BenchmarkLogger` de las 6 corridas ya
+lo tenían):
+
+| Corrida | Piso individual | Muestras bajo 60fps |
+|---|---|---|
+| Baseline 1 | 50.5 | 2/25 |
+| Baseline 2 | 53.6 | 2/25 |
+| Baseline 3 | 49.9 | 2/24 |
+| Texturizado 1 | 49.3 | 5/23 |
+| Texturizado 2 | 49.3 | 4/24 |
+| Texturizado 3 | 52.5 | 6/24 |
+
+**Las 6 corridas tienen muestras por debajo de 60fps — no es una sola
+corrida arrastrando el promedio.** Antes de aceptar esto como "inconsistencia
+del piso de `mode=joint`" sin más (la lectura por defecto, dado que
+`fase2-benchmark-conjunto.md` sección 8 sí había cerrado limpio, cero
+muestras bajo 60, dos corridas), investigué la causa en vez de etiquetarlo
+ruido — exactamente lo que ya se había hecho mal una vez hoy mismo, en la
+revisión de T4 (`definicion-escala-v1.md`).
+
+**Causa 1, confirmada — captura de pantalla del propio arnés.**
+`_maybe_screenshot()` llama `get_viewport().get_texture().get_image()` (una
+lectura síncrona de GPU) en `t=5.0s` (`_shot_times[0]` para `mode=joint`,
+`total_time=10.0`, `[total_time*0.5, total_time*0.95]`). Las 6 corridas
+tienen su peor muestra (49.3-53.6fps) concentrada exactamente en la
+ventana `elapsed≈5.0-5.5s` — no es coincidencia: esa función no corre en
+`--headless` (confirmado antes de este hallazgo, en la revisión de T4 de
+hoy, las corridas headless no mostraban este patrón concentrado en un
+punto fijo, sino ruido disperso a lo largo de toda la corrida o ninguna
+muestra baja en absoluto). Agregado `no-screenshot=1` (nuevo flag,
+diagnóstico) para aislarlo sin tocar nada más — 2 corridas de control
+(1 baseline, 1 texturizado, misma población, ventana, Vulkan real) con el
+flag activo: el piso sube a 56.4-57.3fps, la muestra de ~49-53fps
+desaparece por completo.
+
+**Causa 2, evidencia fuerte pero no aislada del todo — ráfagas de
+reposición del arnés sintético.** Con la captura ya descartada, sigue
+habiendo un dip más chico (56-59fps) recurrente cada ~2.1-2.2s, presente
+por igual en baseline y texturizado (no lo causa esta tarjeta). Correlaciona
+con claridad con caídas periódicas de `proj_count` en el mismo CSV (ej.
+`stress_joint_1786304971.csv`: proj cae de 3587 a 3010 entre `t=2.11s` y
+`t=3.07s`, fps cae de 68.7 a 59.4-59.7 en la misma ventana) — consistente
+con que muchos proyectiles inyectados juntos durante la rampa comparten
+vida útil similar y expiran en tandas sincronizadas, y `_top_up_projectiles()`
+reponiendo esa tanda de golpe (acotado a `MAX_SPAWN_PER_FRAME=300`, con
+resolución de tipo por RNG por cada spawn) cuesta más CPU por frame que el
+tick estacionario del resto de la corrida. Mismo espíritu que el hallazgo
+de PROJ_ZONE en la sección 2 de este documento: un artefacto del método de
+inyección sintética del arnés, no necesariamente un costo del juego real
+(que nunca repone población a un objetivo fijo frame a frame — las torres
+disparan a su propia cadencia). **No lo doy por probado al 100%** — la
+correlación es clara pero no instrumenté el conteo de spawns por frame
+para confirmarlo de forma directa; queda como hipótesis fuerte, no hecho
+cerrado.
+
+**Lo que esto no cambia:** la Causa 2 afecta por igual a baseline y
+texturizado (aparece en ambos, con o sin el flag de esta tarjeta), así que
+no invalida la comparación A/B de la sección de arriba (~3% de costo
+incremental por las 8 texturas) — esa lectura sigue en pie. Lo que sí
+cambia: la afirmación de "ambas condiciones se sostienen cómodas arriba de
+60fps de promedio" de más abajo describía un promedio, no el estándar de
+"cero muestras bajo 60" que cerró la sección 8 — con ese estándar, ninguna
+de las 6 corridas de hoy cierra limpio todavía, con o sin las texturas de
+esta tarjeta.
 
 ### Lectura
 
 **Sí cuesta, de forma chica pero consistente y reproducible — no es
 ruido.** ~2fps de promedio (~3%) en las tres corridas, siempre en la misma
 dirección (texturizado por debajo de baseline las 3 veces, nunca al revés).
-Comparado con la varianza de corrida a corrida que ya se vio en la revisión
-de T4 de hoy (una sola corrida de `mode=joint` bajó a 51fps de piso sin
-ningún cambio de por medio), esta diferencia es chica pero no desaparece
-dentro de ese ruido porque **apunta siempre para el mismo lado** en los 3
-pares.
+La diferencia sobrevive incluso descontando el ruido de corrida a corrida
+ya identificado arriba (captura de pantalla + ráfagas de reposición) porque
+esas dos causas afectan a baseline y texturizado por igual — el ~3% es el
+delta que queda *después* de esas dos fuentes de ruido, no confundido con
+ellas.
 
-**No pone en riesgo el objetivo.** Ambas condiciones se sostienen cómodas
-arriba de 60fps de promedio a la población ×1.2 completa; el costo de pasar
-de 1 draw call de torres a 8 no compite en magnitud con lo que ya se
-resolvió en la sección 8 (la migración BEAM). Con las 20 torretas reales
-del catálogo (más `type_id` que las 8 de hoy, pero cada una con su propio
-bind también hoy en el diseño actual), el costo esperado escala con
+**No pone en riesgo el promedio del objetivo, pero el piso de `mode=joint`
+en sí todavía no cierra limpio contra el estándar de la sección 8** (ver
+arriba) — eso es anterior a esta tarjeta, no causado por las texturas. El
+costo de pasar de 1 draw call de torres a 8 no compite en magnitud con lo
+que ya se resolvió en la sección 8 (la migración BEAM). Con las 20 torretas
+reales del catálogo (más `type_id` que las 8 de hoy, pero cada una con su
+propio bind también hoy en el diseño actual), el costo esperado escala con
 cantidad de tipos *presentes*, no con cantidad de torres — 8 tipos ya
 cuestan lo medido acá aunque hubiera 3 o 30 torres de cada uno, mismo
 principio que ya confirmó `fase2-vfx-benchmark.md` para partículas/overdraw
