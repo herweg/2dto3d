@@ -483,3 +483,113 @@ Si el director prefiere confirmarlo a ojo antes de decidir, las capturas
 de esta sección (`sprite_test_compare_4way_sizes.png`,
 `aspect_ref_sprite2d.png` vs `aspect_entityrendersync.png`) alcanzan sin
 correr nada de nuevo.
+
+## 13. Filtro de mipmaps activado a nivel de proyecto (09-ago, decisión del director)
+
+**Decisión:** resolver primero la sección 11, dejar el bug de aspecto
+cuadrado de la sección 12 como tarjeta de motor chica y no urgente (hoy
+queda tapado por el ruido general a 26px; tiene sentido atacarlo después
+de lo que más pesa, no ahora).
+
+**Cambio aplicado:** `game/project.godot`, sección `[rendering]` nueva —
+
+```
+textures/canvas_textures/default_texture_filter=3
+```
+
+Equivale a **Project Settings → Rendering → Textures → Canvas Textures →
+Default Texture Filter → Linear (Mipmaps)** en el editor (mismo lugar que
+señaló el director) — lo apliqué directo al archivo de proyecto en vez de
+abrir el editor gráfico, mismo criterio que ya se usó para los `.import`
+esta sesión. `3` es el valor del enum de este setting específico
+(`Nearest=0, Linear=1, Nearest Mipmap=2, Linear Mipmap=3` — este enum no
+incluye "Parent Node" como el `texture_filter` por-nodo, por eso el
+corrimiento de +1 respecto a `CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS`
+que se usó como diagnóstico puntual en la sección 11).
+
+**Verificado por comportamiento, no solo por el número de enum:** corrí
+`sprite-test=` normal (sin el flag de diagnóstico `sprite-test-mipmap-filter`
+de la sección 11 — el default del proyecto ya alcanza solo) sobre
+`torreta_recta_v2.png` (950px, con `mipmaps/generate=true` desde la
+sección 11). Ruido bajó de 69.18 (baseline sin nada) a **20.55** — mismo
+orden de magnitud que el 15.34 medido con el filtro forzado a mano en la
+sección 11 (la diferencia es ruido de medición entre corridas — el
+proyectil de simulación en tránsito no cae exactamente en el mismo pixel
+dos veces, ver metodología de la sección 12 — no una discrepancia real de
+comportamiento). Confirma que el default nuevo aplica sin que haga falta
+tocar nada por torreta.
+
+**Alcance de este cambio:** afecta a **todas** las texturas 2D del
+proyecto (las 20 torretas del catálogo cuando tengan sprite, no solo esta
+muestra), que es justo lo que pedía la sección 11 — un fix a nivel de
+proyecto, no por torreta. Sigue haciendo falta `mipmaps/generate=true` en
+el `.import` de cada asset para que haya mipmaps que este filtro pueda
+usar (el default de Godot al importar sigue siendo `false` — cada nueva
+torreta que entregue Arte va a necesitar ese toggle también, no es
+automático).
+
+**Regresión:** `place-all-towers real-stats` headless, limpio (torres: 8,
+muertes: 7, leaks: 0). No se re-corrió el benchmark de fps completo — el
+cambio es de filtro de textura, ya establecido en `fase2-vfx-benchmark.md`
+que asignar/filtrar texturas no mueve el costo por cuadro.
+
+**No cambia el veredicto de la sección 8** (sigue "no pasa", ronda 3 en
+curso) — mejora la base sobre la que se va a evaluar la próxima muestra de
+Arte, no la muestra en sí.
+
+## 14. Bug de aspecto cuadrado — corregido (09-ago, decisión del director)
+
+**Decisión:** no tocar el motor (el quad de torre sigue fijo en 26×26,
+cuadrado — `entity_render_sync.gd`, sin cambios). En cambio, garantizar
+que lo que entra al quad **ya sea cuadrado**, y pedir esa misma regla a
+Arte de acá en más. Dos partes:
+
+**1. La regla para Arte ya existe, no hacía falta crearla.**
+`prompts-arte-torretas-v1.md` línea 61 ya pide *"Square canvas... 1024×1024px"*
+en el preámbulo compartido (afecta a las 20 torretas, no es nuevo para
+esta pieza). El problema nunca fue que no se pidiera — es que el
+generador de ronda 2 no lo respetó: entregó 1024×1536 (rectangular) pese
+al pedido, así lo dejó anotado la sección 2 de este documento desde el
+principio. Pedirlo de nuevo no alcanza si el generador lo vuelve a
+ignorar.
+
+**2. Por eso, el motor lo garantiza igual, sin depender de que Arte/el
+generador lo cumplan.** Antes de importar, el recorte al bounding box de
+alfa ya no se queda con el rectángulo ajustado al contenido (950×1166,
+como estaba desde la sección 3) — se rellena con margen transparente
+hasta el lado más largo, centrado, dando un canvas cuadrado real
+(1166×1166) sin recortar ni un píxel del arte. Aplicado sobre
+`torreta_recta_v2.png` en el lugar (backup del original sin rellenar en
+`benchmark_results/torreta_recta_v2_pre_square_backup.png` por si hace
+falta comparar). Mismo criterio a aplicar en cualquier entrega futura de
+Arte, cumpla o no el 1024×1024 pedido — es un paso de preparación de
+motor, no algo que dependa de que el generador coopere.
+
+### Verificación
+
+Reimport + re-corrida de `orientation-test=` (mismo método de la sección
+8: `Sprite2D` de referencia, que preserva aspecto por construcción, al
+lado del `MultiMeshInstance2D` real del juego, mismo tamaño nominal).
+Capturas: `aspect_ref_sprite2d_v2.png` / `aspect_entityrendersync_v2.png`.
+**Las proporciones ya coinciden** — antes el render del juego se veía
+perceptiblemente más achatado/ancho que la referencia (sección 12); ahora
+no hay diferencia visible a ojo entre los dos.
+
+Re-corrida también del smoke test real a 26px (`sprite-test=`, mismo
+recorte 36×36) con las dos correcciones ya encimadas (canvas cuadrado +
+filtro de mipmaps de la sección 13, ambas activas por default, sin flags
+de diagnóstico): `sprite_test_crop_nearest10x_squarefixed.png`. Ruido
+TV=22.23 — en la misma banda que el 20.55 de la sección 13 (el cuadrado no
+mueve mucho esta métrica puntual a 26px, como ya se anticipaba en la
+sección 12: "hoy lo tapa el ruido general"), pero corrige la distorsión de
+proporciones de forma permanente e independiente de esa métrica — no era
+un problema de ruido, era un problema de forma.
+
+**No cambia el veredicto de la sección 8.** Con las tres correcciones de
+motor ya aplicadas (orientación, mipmaps+filtro, aspecto cuadrado), la
+base sobre la que se va a evaluar la ronda 3 de Arte está resuelta del
+lado de motor — lo que quede sin leerse bien a partir de acá es contenido
+de Arte, no artefacto de render.
+
+**Regresión:** `place-all-towers real-stats` headless, limpio (torres: 8,
+muertes: 7, leaks: 0).

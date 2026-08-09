@@ -28,9 +28,11 @@ var dot_linger: PackedFloat32Array
 ## catálogo (docs-torretas-diseno.md): misil = "Mortero" (#9, arco + delay +
 ## splash al impacto), lanzallamas = "Fuego" (#11, DoT de área en el suelo)
 ## — mismo mecanismo bajo nombres distintos en cada documento, reconciliado
-## 08-ago. Riel (#3) y láser quedan sin resolver si el segundo tiene entrada
-## propia en el catálogo de 20 — esa parte es decisión de diseño, no de
-## nomenclatura, y sigue abierta.
+## 08-ago. Láser (fila 6) resuelto 09-ago: arma propia del catálogo (#21,
+## docs-torretas-diseno.md), misma familia BEAM que Fuego pero configuración
+## y sprite distintos — ya lo eran en los datos de abajo, la fila 6 no
+## cambia; lo que se resolvió fue si el catálogo de diseño lo reconoce como
+## torreta separada (sí) en vez de dejarlo sin nombre propio.
 const TOWER_MODE_BEAM := 6  # láser + lanzallamas: rectángulo de DoT continuo, sin ProjectileStore
 const TOWER_MODE_RAIL := 7  # riel: carga + hitscan instantáneo en línea, sin ProjectileStore
 

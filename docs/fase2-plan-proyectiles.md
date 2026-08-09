@@ -250,13 +250,9 @@ como restricción de diseño (un solo estado visual por enemigo aunque haya
 más de un efecto mecánico activo) para cuando se retomen las categorías
 D/E/F.
 
-**Reconciliación pendiente con `docs-torretas-diseno.md`, para que quede
-anotada:** el catálogo de 20 no tiene una entrada llamada "Láser" — lo más
-cercano por nombre es Riel (#3), que es un mecanismo distinto (hitscan de
-carga, no DPS continuo). Tampoco usa los nombres "misil" ni "lanzallamas" —
-lo más cercano es Mortero (#9, trayectoria en arco) y Fuego (#11, zona de
-DoT), que no son necesariamente lo mismo que lo implementado acá. Tres
-mecanismos con nombre y fila real en `tower_store.gd` sin contraparte clara
-en el catálogo de la PM — vale una pasada de reconciliación de nombres
-antes de que Dirección de Arte (`docs/diseno-grafico.md`) tenga que adivinar
-qué ilustrar para cada fila.
+**Reconciliación con `docs-torretas-diseno.md` — resuelta, 09-ago.** Mortero
+(#9) = misil, Fuego (#11) = lanzallamas (mismo mecanismo, nombre distinto por
+documento, reconciliado 08-ago). Láser quedaba sin contraparte en el catálogo
+de 20 — resuelto: es arma propia (**#21**, misma familia BEAM que Fuego,
+configuración y sprite distintos). Los tres mecanismos con fila real en
+`tower_store.gd` tienen ahora nombre y entrada de catálogo sin ambigüedad.

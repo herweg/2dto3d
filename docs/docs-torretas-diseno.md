@@ -211,6 +211,22 @@ Cada torreta tiene 3 "capas" de lectura visual según su nivel de stats:
 
 ---
 
+### 21. Torreta Láser (nueva — resuelta 09-ago, arma separada de Fuego)
+- **Color de firma:** rosa/fucsia brillante (propuesto — no colisiona con ningún
+  color ya asignado de los 20 anteriores; ajustable si Arte prefiere otro al
+  llegar a Fase 4, no hay canon previo que romper).
+- **Mecánica:** misma familia que Torreta de Fuego (#11) — rectángulo de daño
+  continuo (DoT) que parte de la torre, sin proyectil — pero es un **arma
+  propia, no una variante de Fuego**: haz angosto y largo, DPS alto, tiempo de
+  persistencia corto (`tower_store.gd`, fila 6, ya implementada y distinta de
+  la fila 5 desde antes de esta decisión). Fuego es ancho/corto/DPS bajo/
+  persistencia larga; Láser es lo opuesto en las cuatro dimensiones.
+- **Visual:** haz de luz fino y continuo (no el parche de fuego animado en el
+  suelo de Fuego). Sprite propio pendiente de Fase 4 — no bloquea nada de
+  motor, la mecánica ya corre en la pantalla jugable real.
+
+---
+
 ## Cómo se relaciona con lo ya implementado
 
 - Todo esto sigue el mismo patrón de datos que `TOWER_TYPE_STATS`: cada torreta es una
@@ -261,8 +277,9 @@ Cada torreta tiene 3 "capas" de lectura visual según su nivel de stats:
 > disparo (trayectoria precalculada al lanzar, splash al llegar), nombre
 > distinto en cada documento. **Fuego** (#11, DoT de área que queda en el
 > suelo) es lo que el motor llama "lanzallamas" — mismo mecanismo. Riel (#3)
-> sigue confirmado distinto de láser, sin cambios ahí. **Lo que sigue sin
-> resolver, porque es diseño y no nomenclatura:** si láser (DPS continuo,
-> ya migrado a `TOWER_MODE_BEAM` junto con Fuego/lanzallamas) es una entrada
-> nueva de este catálogo de 20, o si Riel lo reemplaza, o si queda afuera a
-> propósito — la pregunta original de este párrafo sigue en pie tal cual.
+> sigue confirmado distinto de láser, sin cambios ahí.
+>
+> **Resuelto, 09-ago.** Láser es arma propia del catálogo — **#21** arriba,
+> misma familia mecánica que Fuego (rectángulo BEAM) pero configuración y
+> sprite distintos, no una variante ni una entrada absorbida por Riel. Cierra
+> la única pregunta de este párrafo que seguía abierta.

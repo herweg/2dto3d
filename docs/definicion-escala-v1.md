@@ -167,6 +167,48 @@ GPU eq. GTX 1660 / RX 580, 8GB RAM.
 > 20% plano deja de ser suficiente sin revisarlo. Lo dejo anotado para
 > retomarlo en ese momento, no ahora — **T4 queda cerrado con esta condición.**
 
+> **Mesa de Developers — revisión de la condición (09-ago).** Se activó
+> `texture_filter` real (mipmaps) a nivel de proyecto
+> (`smoke-test-motor-arte-v1.md` sección 13) — el disparador textual de la
+> condición de arriba ("filtrado real" en vez de quads planos) ya ocurrió.
+> Re-corrida antes de dar el colchón del 20% por bueno sin más trámite, no
+> asumido:
+>
+> - **`mode=joint` (población/CPU, sin texturas — quads de color plano,
+>   verificado en código antes de correr nada):** 3 corridas,
+>   `proj-type=realistic`, régimen sostenido tras la rampa — 61.9-84.5fps,
+>   61.4-85.3fps, y una tercera con ruido (51.1-79.3fps, varias muestras
+>   bajo 60). 2 de 3 limpias, consistentes con el 60.3-87fps histórico de
+>   `fase2-benchmark-conjunto.md` sección 8; la corrida ruidosa no se
+>   repite en las otras dos, se lee como varianza de medición (fase de
+>   asentamiento del spawner), no regresión — pero **esta corrida no podía
+>   detectar el costo que dispara la condición de todos modos**: no
+>   renderiza ninguna textura, así que el filtro de mipmaps no le pega
+>   estructuralmente. Sirve como control de que nada más se rompió, no
+>   como respuesta a la pregunta de la condición.
+> - **`mode=vfx vfx-test=scenario` (población real + 20 partículas + 10
+>   overdraw, texturas reales, Vulkan real en ventana — el escenario que sí
+>   ejercita el filtro nuevo):** 50.9-70.0fps sostenido. Comparado contra
+>   el piso ya medido en `fase2-vfx-benchmark.md` sección 2 **antes** de
+>   activar el filtro (48.3fps mínimo / 63.8fps promedio, mismo escenario):
+>   estadísticamente el mismo rango, sin caída adicional atribuible al
+>   filtro.
+>
+> **Veredicto: el filtro de mipmaps no costó nada medible en ninguno de los
+> dos bancos — T4 sigue confirmado, sin ajustar el colchón por esta causa
+> puntual.** Tiene sentido en retrospectiva: filtrado con mipmaps es una
+> operación de GPU barata comparada con generarlos (costo de import, ya
+> pagado antes de que el juego corra), no un costo por-frame significativo.
+>
+> **Lo que este chequeo NO resuelve, porque ya estaba así antes de hoy y no
+> lo causó este cambio:** `fase2-vfx-benchmark.md` sección 2 ya había
+> medido el escenario real de VFX con el piso por debajo de 60fps
+> (48.3-50.4fps mínimo en los 5 escenarios, antes de que existiera ningún
+> filtro de mipmaps) — se dejó anotado ahí como "información para
+> calibrar, no un fracaso", sin un veredicto formal de T4 sobre ese caso
+> puntual. Ese pendiente sigue abierto, independiente de esta revisión —
+> no lo estoy cerrando ni reabriendo acá, solo señalando que no es nuevo.
+
 ---
 
 ## Documento de diseño de combate v1 (T3)
