@@ -8,7 +8,13 @@ extends Node2D
 
 const LEVEL_DEF := preload("res://data/level_01.tres")
 
-const MAX_ENEMIES := 360  # margen sobre el objetivo de estrés de 300
+## Subido de 360 a 2.500 (09-ago) — el tope viejo (300 + margen) nunca se
+## pensó contra el objetivo de escala real de T2/T4 (2.000-2.400), solo
+## contra el stress-test original de esta pantalla. Necesario para poder
+## correr la población real del pico conjunto por el camino de producción
+## (`Level1.tscn`), no el arnés sintético — ver plan-fases.md, punto 4,
+## verificación de la Causa 2 de fase2-benchmark-conjunto.md sección 11.
+const MAX_ENEMIES := 2500
 const MAX_PROJ := 4000
 const MAX_TOWERS := 64
 
@@ -84,6 +90,14 @@ var _stress_logger: BenchmarkLogger = null
 const STRESS_ENEMY_HEALTH := 600.0
 
 func _ready() -> void:
+	# Mismo fix que stress_main.gd (fase2-vfx-benchmark.md sección 3) — sin
+	# esto, a población baja/moderada el frame time mide el refresco del
+	# monitor (120Hz acá, confirmado con el fps redondo de la corrida de
+	# stress-test de hoy: 120.0/110.0/100.0 exactos), no el motor. Esta
+	# pantalla nunca lo tuvo — no se había corrido a población real antes de
+	# hoy. No aplica en --headless.
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	_level = LEVEL_DEF
 
 	_enemy_store = EnemyStore.new(MAX_ENEMIES)
@@ -168,20 +182,30 @@ func _parse_cli_args() -> void:
 	if _stress_test:
 		_setup_stress_test()
 
-## Coloca las torres en grilla dentro de la primera buildable_zone (alcanza
-## para 30 con espaciado de sobra) y arranca el logger — el spawner de
-## enemigos se resuelve en _process() vía _stress_top_up_enemies().
+## Coloca las torres pegadas al borde del carril (mismo x=30 que ya probó
+## `_place_all_types_test()` con muertes reales, no el x=60+ de la grilla
+## vieja) — corregido 09-ago: la grilla original barría toda la zona
+## construible hacia la derecha (hasta x=410+), muy lejos del carril real
+## (los enemigos caminan pegados a `waypoints`, no por todo `path_rects`) —
+## con `real-stats` activo eso daba 24 torres colocadas pero 0 proyectiles
+## y 0 muertes en 15s, el rango real (170-260px) nunca llegaba. Dos
+## columnas cerca del borde (x=30/100, 70px de separación, mismo
+## STRESS_TOWER_SPACING) en vez de una sola fila — a una sola columna no
+## entran 24 torres con `TOWER_MIN_SPACING=48` en los 640px de alto del
+## carril (640/23≈28px < 48). Arranca el logger — el spawner de enemigos
+## se resuelve en _process() vía _stress_top_up_enemies().
 func _setup_stress_test() -> void:
-	var zone: Rect2 = _level.buildable_zones[0]
+	var col_count := 2
+	var per_col := ceili(float(_stress_towers) / float(col_count))
+	var y_step := 640.0 / maxf(1.0, float(per_col - 1))
 	var placed := 0
-	var y := zone.position.y + 40.0
-	while y < zone.position.y + zone.size.y - 20.0 and placed < _stress_towers:
-		var x := zone.position.x + 40.0
-		while x < zone.position.x + zone.size.x - 20.0 and placed < _stress_towers:
-			if _place_tower(Vector2(x, y), placed % 4):
+	for col in col_count:
+		var x := 30.0 + col * STRESS_TOWER_SPACING
+		for i in per_col:
+			if placed >= _stress_towers:
+				break
+			if _place_tower(Vector2(x, -320.0 + i * y_step), placed % 4):
 				placed += 1
-			x += STRESS_TOWER_SPACING
-		y += STRESS_TOWER_SPACING
 
 	var out_path := "res://benchmark_results/level1_stress_%d.csv" % Time.get_unix_time_from_system()
 	_stress_logger = BenchmarkLogger.new(out_path)
@@ -312,15 +336,26 @@ func _process(delta: float) -> void:
 ## repone lo que muere/llega a la meta) en vez del spawner de a uno de la
 ## pantalla normal — para poder mantener el pico el tiempo suficiente para
 ## medir, no solo tocarlo un instante.
+## Corregido 09-ago: spawneaba todo en spawn_point (+jitter chico) — con
+## salud alta (no se filtra por muertes) y sin más spawns una vez llegado
+## al objetivo, eso arma una sola "ola" densa que avanza en bloque en vez
+## de una población distribuida en régimen — nunca cruza más que un par de
+## torres a la vez, no es comparable a la población sostenida de
+## mode=joint (que sí reparte cada spawn en un punto aleatorio de
+## path_rects, ver stress_main.gd::_random_point_in_path()). Mismo patrón
+## acá para que la comparación sea real.
 func _stress_top_up_enemies() -> void:
 	var spawned := 0
 	while _enemy_store.active_count < _stress_enemies and spawned < STRESS_SPAWN_PER_FRAME:
-		var jitter := Vector2(randf_range(-20.0, 20.0), randf_range(-20.0, 20.0))
-		var idx := _enemy_store.spawn(_level.spawn_point + jitter, ENEMY_SPEED, STRESS_ENEMY_HEALTH, 0.0, ENEMY_VARIANT)
+		var idx := _enemy_store.spawn(_random_point_in_path(), ENEMY_SPEED, STRESS_ENEMY_HEALTH, 0.0, ENEMY_VARIANT)
 		if idx == -1:
 			break
 		_enemy_store.waypoint_index[idx] = 0
 		spawned += 1
+
+func _random_point_in_path() -> Vector2:
+	var r: Rect2 = _level.path_rects[randi() % _level.path_rects.size()]
+	return Vector2(randf_range(r.position.x, r.end.x), randf_range(r.position.y, r.end.y))
 
 func _maybe_screenshot() -> void:
 	if DisplayServer.get_name() == "headless":

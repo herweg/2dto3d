@@ -42,8 +42,7 @@ ver abajo. El placeholder de color plano (`level_controller.gd::TYPE_COLORS`)
 es infraestructura suficiente para cerrar Fase 2; no bloquea nada que el
 motor tenga que resolver.
 
-**Criterio de cierre — 4 puntos, 2 cumplidos, 1 corregido en el camino, 1
-todavía abierto (revisión de Dirección, 09-ago):**
+**Criterio de cierre — 4 de 4 puntos cumplidos (Dirección, 09-ago):**
 
 1. ~~Benchmark de pico conjunto sostenido por encima de 60fps con margen del
    20%~~ — **hecho** (`fase2-benchmark-conjunto.md` sección 8, dos corridas
@@ -61,8 +60,10 @@ todavía abierto (revisión de Dirección, 09-ago):**
 3. Catálogo de tipos de torreta/proyectil sin ambigüedad de nombres —
    **hecho** (Mortero/Misil, Fuego/Lanzallamas, y ahora Láser como arma
    propia, `docs-torretas-diseno.md` #21).
-4. **Costo de GPU con texturas reales en las 24 entidades del pico
-   conjunto, no solo una — todavía NO hecho.** Los bancos que confirmaron
+4. ~~Costo de GPU con texturas reales en las 24 entidades del pico
+   conjunto, no solo una~~ — **hecho** (ver la cadena completa abajo: tres
+   rondas de revisión, cerrado con una corrida en `Level1.tscn` real,
+   78.3-80.2fps de piso, cero muestras bajo 60). Los bancos que confirmaron
    el punto 2 no ejercitan esto: `mode=joint` no renderiza ninguna textura
    (quads de color plano — confirmado en código, no supuesto), y
    `mode=vfx` ejercita texturas reales de partículas/overdraw pero no el
@@ -171,18 +172,61 @@ todavía abierto (revisión de Dirección, 09-ago):**
    > con ese dato, sin otra ronda. Si aparece igual en `Level1.tscn`, es un
    > hallazgo real de motor y no un artefacto del arnés, y ahí sí ameritaría
    > mirarlo a fondo antes de cerrar.
+   >
+   > **Mesa de Developers, 09-ago — corrido, el dip no aparece.** "No hace
+   > falta construir nada" resultó optimista: `stress-test
+   > stress-towers=24 stress-enemies=2400 real-stats` no dio un número
+   > usable hasta corregir 4 gaps, los 4 necesarios solo para tener un dato
+   > (no agregado extra) — el detalle completo está en
+   > `fase2-benchmark-conjunto.md` sección 12: `MAX_ENEMIES` era un tope de
+   > 360 (heredado del stress-test original de esta pantalla, nunca pensado
+   > contra la escala de T2/T4), la grilla de torres quedaba fuera de rango
+   > real, el spawner sintético concentraba todo en `spawn_point` en vez de
+   > repartirlo por el carril (arma una "ola" en vez de población en
+   > régimen), y esta pantalla nunca había desactivado vsync (mismo bug de
+   > techo de monitor que ya se había encontrado y corregido en
+   > `stress_main.gd`, nunca heredado acá). Ninguno es diseño a propósito —
+   > los 4 son gaps de una pantalla que nunca se había corrido a la
+   > población real de T2/T4 antes de hoy.
+   >
+   > Con los 4 corregidos, 3 corridas de confirmación (ventana, Vulkan
+   > real, mismo objetivo ×1.2): **piso 78.3-80.2fps, cero muestras bajo
+   > 60fps en las tres.** Sin la correlación proj_count/fps que sí se veía
+   > en la sección 11 — el fps baja suave y monótono, no en dips
+   > periódicos. Confirma la Causa 2 como artefacto del arnés, mismo
+   > criterio que ya cerró la Causa 1: `_top_up_projectiles()` tampoco
+   > existe fuera de `stress_main.gd`, el camino de producción repone
+   > proyectiles disparo a disparo a la cadencia real de cada torre, nunca
+   > en lote.
+   >
+   > No cierro el punto 4 ni Fase 2 yo — dato completo para que
+   > Dirección/PM lo haga.
+   >
+   > **Dirección, 09-ago — cierro el punto 4.** Piso 78.3-80.2fps, cero
+   > muestras bajo 60 en las tres corridas, en el camino de producción real
+   > — no el arnés sintético — con el mismo objetivo ×1.2 que validó la
+   > sección 8. Eso limpia la duda de fondo que abrí dos veces (que el piso
+   > fuera un promedio, no un mínimo real; que el patrón periódico pudiera
+   > ser costo real de motor) con el estándar más fuerte posible: la escena
+   > que de verdad va a jugar el usuario, no una comparación indirecta. Los
+   > 4 gaps que encontraron en el camino no me preocupan — son síntomas
+   > concretos y verificables (tope duro, 0 muertes, fps redondos), no
+   > decisiones de diseño discutibles, y cada uno se explica solo.
+   >
+   > Vale decirlo explícito: dos rondas seguidas pidiendo "un paso más" y
+   > las dos veces la investigación resolvió la duda de verdad en vez de
+   > taparla — esa es la disciplina que este documento existe para proteger.
+   > Punto 4: **hecho.**
 
-**Fase 2 queda cerrada del lado de motor cuando el punto 4 también esté
-hecho — no antes.** Los otros tres ya lo están; este es el único que falta
-y es barato de cerrar. Lo que sigue en vuelo (ronda 3 de arte, triage de
-las 12 torretas del catálogo sin fila todavía) sigue sin bloquear nada de
-esto — corresponde a Fase 3/4, ver abajo. Deuda técnica menor que sigue
-pendiente sin bloquear el cierre: `TODO` de
-`DEV_RANGE_OVERRIDE`/`DEV_FIRE_RATE_OVERRIDE` en `tower_store.gd` (poner en
-0.0 antes de calibrar combate real — tarea de Fase 3); el bug de aspecto
-cuadrado ya no está en esta lista — se corrigió en
-`smoke-test-motor-arte-v1.md` sección 14 (relleno a canvas cuadrado antes
-de importar, sin tocar el quad del motor).
+**Fase 2 queda cerrada del lado de motor — los 4 puntos cumplidos (09-ago,
+Dirección).** Lo que sigue en vuelo (ronda 3 de arte, triage de las 12
+torretas del catálogo sin fila todavía) sigue siendo Fase 4 adelantada, no
+bloqueaba nada de esto. Deuda técnica menor que sigue pendiente sin
+bloquear nada: `TODO` de `DEV_RANGE_OVERRIDE`/`DEV_FIRE_RATE_OVERRIDE` en
+`tower_store.gd` (poner en 0.0 antes de calibrar combate real — tarea de
+Fase 3); el bug de aspecto cuadrado ya no está en esta lista — se corrigió
+en `smoke-test-motor-arte-v1.md` sección 14. **Fase 3 queda habilitada para
+arrancar** — ver abajo.
 
 ---
 
@@ -203,8 +247,10 @@ colocación → "Comenzar" → ronda, puntos por baja como moneda de desbloqueo
 (ramas globales + ramas por torreta). Es alcance, no números — la
 calibración se define cuando Fase 3 arranque de verdad, mismo criterio que
 ya usó este proyecto para Fase 2 (no fijar números sobre datos que todavía
-no existen). Arranca cuando el punto 4 del criterio de cierre de Fase 2
-también esté hecho.
+no existen). **Habilitada para arrancar** — Fase 2 ya cerró del lado de
+motor (09-ago). Primer paso sugerido: la pregunta abierta de
+`fase3-alcance-v1.md` sección 4 punto 1 (¿costo de colocación dentro de la
+ronda, o el desbloqueo es el único gate?) antes de tocar cualquier número.
 
 ---
 

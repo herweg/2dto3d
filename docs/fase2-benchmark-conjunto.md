@@ -651,6 +651,89 @@ Dirección/PM decida el cierre de ese punto (y de Fase 2 del lado de motor);
 no lo cierro acá, ese documento es de alcance restringido a Dirección de
 Desarrollo/PM.
 
+## 12. ¿La Causa 2 aparece en `Level1.tscn` real? (09-ago) — pedido de Dirección
+
+Pregunta puntual de Dirección, en vez de seguir instrumentando el arnés
+sintético: correr la misma población (2.400 enemigos, 24 torres) por el
+camino de producción real (`Level1.tscn`, `BenchmarkLogger` ya cableado
+detrás de `stress-test`) y ver si el dip periódico de la Causa 2 (sección
+11) aparece ahí también. Si no aparece, es un artefacto del arnés
+(`_top_up_projectiles()` no existe fuera de `stress_main.gd`, igual que
+`_maybe_screenshot()` de la Causa 1). Si aparece, es un hallazgo real de
+motor.
+
+### La pantalla nunca había corrido a esta escala — 4 gaps encontrados, los 4 necesarios para tener un dato real
+
+`stress-test stress-towers=24 stress-enemies=2400 real-stats` no dio un
+número usable en el primer intento — dio tres números distintos, cada uno
+sin sentido por una razón distinta, hasta corregir:
+
+1. **`MAX_ENEMIES := 360`** — tope duro muy por debajo de 2.400 (heredado
+   del stress-test original de esta pantalla, pensado contra 300, nunca
+   contra el objetivo real de T2/T4). Primer intento: `enemigos activos:
+   360`, la rampa se cortaba ahí. Subido a 2.500.
+2. **Grilla de torres fuera de rango.** `_setup_stress_test()` barría toda
+   la zona construible hacia la derecha (hasta x=410+); los enemigos
+   caminan pegados a `waypoints` (`level_01.tres`), no por todo
+   `path_rects` — con `real-stats` (rango real 170-260px) nunca llegaban.
+   Resultado con el tope ya corregido: `proyectiles activos: 0, muertes:
+   0` en 15s con 2.400 enemigos activos. Reescrito a dos columnas pegadas
+   al borde del carril (x=30/100, mismo x que ya probó
+   `_place_all_types_test()` con muertes reales, sección 9).
+3. **Spawn concentrado en `spawn_point`.** `_stress_top_up_enemies()`
+   spawneaba todo en `spawn_point + jitter` chico — con salud alta (no se
+   filtra por muertes, por diseño) y sin nada más una vez alcanzado el
+   objetivo, arma una sola "ola" densa que avanza en bloque y cruza casi
+   todas las torres en el mismo instante, no una población en régimen
+   distribuida por todo el carril (que es como spawnea `mode=joint`, vía
+   `_random_point_in_path()`). Corregido al mismo patrón — necesario para
+   que la comparación contra la sección 11 sea real, no solo para que
+   "ande".
+4. **Vsync nunca desactivado en esta pantalla.** `stress_main.gd` ya tenía
+   el fix de `fase2-vfx-benchmark.md` sección 3 (monitor a 144Hz
+   enmascarando el techo real); `level_controller.gd` nunca lo heredó
+   porque nunca se había corrido a población real antes de hoy. Sin esto,
+   el primer resultado con los 3 fixes de arriba ya aplicados daba fps
+   sospechosamente redondos (120.0/110.0/100.0 exactos) — el techo del
+   monitor, no el motor. Agregado el mismo guard que ya usa
+   `stress_main.gd`.
+
+Los 4 son correcciones necesarias para obtener cualquier dato, no
+construcción nueva más allá de lo que pedía la pregunta — pero vale
+dejarlo anotado: **esta pantalla nunca se había verificado a la población
+real de T2/T4 antes de hoy**, ni siquiera de forma incidental. Los tests
+de la sección 9 (27 muertes, 0 leaks) corrieron con `ENEMY_HEALTH` normal
+y sin barrer la escala completa.
+
+### Resultado, con los 4 fixes aplicados — 3 corridas de confirmación
+
+Ventana, Vulkan real, `real-stats`, mismo objetivo ×1.2 de siempre
+(2.400/24):
+
+| Corrida | Piso | Techo | Promedio | Muestras bajo 60fps |
+|---|---|---|---|---|
+| 1 | 78.6 | 300.8 | 112.85 | 0/110 |
+| 2 | 78.3 | 301.9 | 112.63 | 0/110 |
+| 3 | 80.2 | 301.6 | 113.49 | 0/111 |
+
+**El dip periódico no aparece.** Sin correlación visible entre `proj_count`
+y `fps` (a diferencia de la sección 11, donde las caídas de `proj_count`
+coincidían con las caídas de fps de forma clara) — acá el fps baja de
+forma suave y monotónica a lo largo de la corrida (rampa de vsync
+desactivado asentándose, no un patrón periódico), sin ningún valle por
+debajo de 60fps en ninguna de las 3 corridas. Piso ~78-80fps, muy por
+encima del umbral, con margen real de sobra incluso para el 20% de T4.
+
+**Confirma la Causa 2 como artefacto del arnés, no hallazgo de motor** —
+mismo diagnóstico que la Causa 1: `_top_up_projectiles()` (el mecanismo
+cuyo costo de ráfaga correlacionaba con los dips de la sección 11) no
+existe fuera de `stress_main.gd`; el camino de producción repone
+proyectiles disparo a disparo, a la cadencia real de cada torre, nunca en
+lote. Por construcción, no por argumento — mismo criterio que ya cerró la
+Causa 1.
+
+Dato completo para Dirección/PM — no cierro el punto 4 ni Fase 2 acá.
+
 ---
 
 **Herramientas nuevas en `level_controller.gd`**, quedan disponibles para
