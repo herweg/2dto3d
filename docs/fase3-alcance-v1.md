@@ -144,7 +144,10 @@ Tres piezas nuevas, ninguna es extensión de algo que ya exista — para que
 Dirección de Desarrollo pueda armar tarjetas de trabajo directo desde acá:
 
 1. **Máquina de estados colocación/combate** (sección 1) — gate explícito
-   por botón "Comenzar", `level_controller.gd` no lo tiene hoy.
+   por botón "Comenzar", `level_controller.gd` no lo tiene hoy. **Punto de
+   partida elegido por Dirección (09-ago)** — tarjeta completa en
+   `docs/fase3-tarjeta-estado-ronda-v1.md`, razón de la secuencia en
+   `plan-fases.md`.
 2. **Sistema de guardado/carga** (secciones 2 y 4 punto 3) — desbloqueos y
    árbol de mejoras son permanentes, todo lo de Fase 2 es estado en memoria
    que muere con el proceso.

@@ -600,16 +600,39 @@ Los 12 tipos de torreta del catálogo de 20 que todavía no tienen fila en
 Serpiente) se implementan acá, a medida que el diseño de progresión los
 necesite — no antes.
 
-**Alcance inicial ya capturado:** `fase3-alcance-v1.md` (09-ago) — loop de
-colocación → "Comenzar" → ronda, puntos por baja como moneda de desbloqueo
-(torres nuevas y cantidad de slots), árbol de mejoras estilo Path of Exile
-(ramas globales + ramas por torreta). Es alcance, no números — la
-calibración se define cuando Fase 3 arranque de verdad, mismo criterio que
-ya usó este proyecto para Fase 2 (no fijar números sobre datos que todavía
-no existen). **Habilitada para arrancar** — Fase 2 ya cerró del lado de
-motor (09-ago). Primer paso sugerido: la pregunta abierta de
-`fase3-alcance-v1.md` sección 4 punto 1 (¿costo de colocación dentro de la
-ronda, o el desbloqueo es el único gate?) antes de tocar cualquier número.
+**Alcance capturado y cerrado:** `fase3-alcance-v1.md` (09-ago) — las 4
+preguntas abiertas de la sección 4 quedaron resueltas por la PM el mismo
+día (sin costo de colocación, cantidad de torres atada a nivel de jugador
+y fija durante la ronda; 5 niveles con la progresión temática ya diseñada
+en `diseno-grafico.md`; árbol de mejoras permanente entre partidas;
+combate y progresión se calibran juntos, en ciclos cortos). Es alcance, no
+números — la calibración se define cuando el trabajo arranque en la
+práctica, mismo criterio que ya usó este proyecto para Fase 2.
+
+**Tres piezas de motor identificadas (`fase3-alcance-v1.md` sección 6),
+ninguna extensión de algo que ya exista:** máquina de estados colocación/
+combate, sistema de guardado/carga (lo dispara que el árbol de mejoras sea
+permanente), 4 niveles de contenido nuevos.
+
+**Dirección, 09-ago — punto de partida: la máquina de estados, con
+contenido de niveles en paralelo; guardado queda para después.** Tarjeta
+completa en `docs/fase3-tarjeta-estado-ronda-v1.md`. Razón de la
+secuencia:
+- La máquina de estados es la única de las tres sin dependencia de diseño
+  sin resolver — el loop ya está especificado del todo (sección 1). Y es
+  la que más rinde primero: sin ella no hay forma de *terminar* una ronda,
+  y sin rondas que terminen, el método que la PM acaba de fijar ("combate
+  y progresión juntos, en ciclos cortos") no tiene con qué trabajar
+  todavía — es condición para poder empezar a calibrar, no una tarea más
+  de la lista.
+- Contenido de niveles no compite por el mismo esfuerzo (es autoría sobre
+  `LevelDef`, formato ya estable) ni depende de nada de lo anterior —
+  puede arrancar ahora mismo en paralelo.
+- Guardado/carga es real pero prematuro: construirlo antes de tener ni
+  siquiera un boceto de qué necesita persistir (el árbol de mejoras, la
+  pieza que más forma le va a dar a esos datos, sigue sin diseñar a
+  propósito) arriesga rehacerlo. Se retoma cuando el árbol tenga aunque
+  sea una forma preliminar.
 
 ---
 
