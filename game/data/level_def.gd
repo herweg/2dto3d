@@ -37,6 +37,14 @@ extends Resource
 @export var background_color: Color = Color(0.09, 0.10, 0.08, 1.0)
 @export var background_rect: Rect2 = Rect2(-680, -400, 1400, 840)
 
+## Objetivo de oleada (fase3-tarjeta-estado-ronda-v1.md sección 2, punto 2):
+## conteo fijo para que "la ronda terminó" sea verificable (todos spawneados
+## y ninguno activo) — a propósito NO es una curva de oleadas diseñada, eso
+## es calibración y está fuera de alcance de esa tarjeta
+## (fase3-alcance-v1.md sección 5). Placeholder funcional, no un número de
+## balance.
+@export var wave_enemy_count: int = 10
+
 func is_in_path(pos: Vector2) -> bool:
 	for r in path_rects:
 		if r.has_point(pos):

@@ -67,6 +67,18 @@ var _tower_render: TypedRenderGroup
 var _spawn_timer: float = 0.0
 var _selected_tower_type: int = 0  # teclas 1-4 lo cambian — ver _unhandled_input
 
+## Máquina de estados colocación/combate (fase3-tarjeta-estado-ronda-v1.md) —
+## gatea el spawner normal y la colocación de torres. Fuera de alcance de
+## stress-test a propósito (sección 1 de la tarjeta: "modo normal, no
+## stress-test") — esa pantalla nunca toca _round_state, sigue corriendo
+## exactamente igual que antes de esta tarjeta.
+enum RoundState { PLACEMENT, COMBAT, ROUND_COMPLETE }
+var _round_state: RoundState = RoundState.PLACEMENT
+var _enemies_spawned_this_round: int = 0
+var _start_button: Button = null
+var _test_button: Button = null
+var _exit_button: Button = null
+
 ## Soporte de verificación (Fase 2, primera pasada) — mismo espíritu que
 ## benchmark_main.gd del spike: capturas + auto-quit para poder revisar la
 ## pantalla sin depender de mirar la ventana en vivo.
@@ -159,7 +171,111 @@ func _ready() -> void:
 	_tower_render.add_all_to(self)
 
 	_parse_cli_args()
+
+	if not _stress_test:
+		_setup_round_ui()
+
 	queue_redraw()
+
+## Botón "Comenzar" (fase3-tarjeta-estado-ronda-v1.md sección 4) — primer
+## Control/CanvasLayer del proyecto, a propósito sin estilo (funcional
+## alcanza para esta tarjeta; la pantalla real de UI/HUD es Fase 4). No se
+## crea en stress-test: esa pantalla nunca usa la máquina de estados y no
+## vale la pena pagarle un CanvasLayer extra al camino que el resto de este
+## documento pasó tantas secciones protegiendo de costo incidental de
+## render. Visibilidad inicial resuelta contra _round_state en vez de
+## asumida en true — si `start-round` ya llegó por CLI antes de que este
+## botón exista (segunda pasada de _parse_cli_args(), ver esa función), la
+## ronda ya puede estar en COMBAT para cuando se crea.
+## Botones "TEST: Finalizar ronda" y "Salir al menú" (pedido del usuario,
+## 09-ago) suman al mismo CanvasLayer. Test button con self_modulate
+## llamativo a propósito — ver _force_finish_round() — para que no se
+## confunda con un botón normal ni se pase por alto sin querer.
+func _setup_round_ui() -> void:
+	var layer := CanvasLayer.new()
+	_start_button = Button.new()
+	_start_button.text = "Comenzar"
+	_start_button.position = Vector2(20, 20)
+	_start_button.size = Vector2(160, 40)
+	_start_button.pressed.connect(_start_round)
+	_start_button.visible = _round_state == RoundState.PLACEMENT
+	layer.add_child(_start_button)
+
+	_test_button = Button.new()
+	_test_button.text = "TEST: Finalizar ronda"
+	_test_button.position = Vector2(20, 70)
+	_test_button.size = Vector2(160, 40)
+	_test_button.self_modulate = Color(1.0, 0.35, 0.1)
+	_test_button.pressed.connect(_force_finish_round)
+	layer.add_child(_test_button)
+
+	_exit_button = Button.new()
+	_exit_button.text = "Salir al menú"
+	_exit_button.position = Vector2(20, 120)
+	_exit_button.size = Vector2(160, 40)
+	_exit_button.pressed.connect(_exit_to_menu)
+	layer.add_child(_exit_button)
+
+	add_child(layer)
+
+## Gate único PLACEMENT→COMBAT (fase3-tarjeta-estado-ronda-v1.md sección 3).
+## Dos disparadores: el botón real (juego normal, ver _setup_round_ui) y el
+## flag `start-round` por CLI (headless, ver _parse_cli_args — "el
+## equivalente headless/CLI" que pide la sección 6 de la tarjeta). No-op si
+## ya salió de PLACEMENT: un doble click o un `start-round` repetido en la
+## línea de comandos no debe reiniciar el conteo de spawns.
+func _start_round() -> void:
+	if _round_state != RoundState.PLACEMENT:
+		return
+	_round_state = RoundState.COMBAT
+	if _start_button:
+		_start_button.visible = false
+
+## Marca la ronda completa (fase3-tarjeta-estado-ronda-v1.md sección 5): "al
+## agotar el objetivo, loguear/marcar 'ronda completa' de forma verificable"
+## es el mínimo aceptable de esta tarjeta — qué pasa después (¿otra ronda?
+## ¿fin de sesión?) queda como pregunta abierta para la PM, no se decide
+## acá. El texto/disabled del botón es una cortesía barata para que un
+## jugador real no se quede mirando una pantalla sin ninguna señal, no una
+## pantalla de resultados de verdad (eso sigue siendo Fase 4).
+func _complete_round() -> void:
+	if _round_state != RoundState.COMBAT:
+		return
+	_round_state = RoundState.ROUND_COMPLETE
+	if _start_button:
+		_start_button.text = "Ronda completa"
+		_start_button.disabled = true
+		_start_button.visible = true
+	if _test_button:
+		_test_button.disabled = true
+	print("[level1] ronda completa — objetivo: %d, muertes: %d, leaks: %d" % [_level.wave_enemy_count, _lane_system.killed_count, _lane_system.leaked_count])
+
+## Botón "TEST: Finalizar ronda" (pedido del usuario, 09-ago) — atajo para
+## no esperar a que la oleada real se agote durante testing manual. Si
+## todavía está en PLACEMENT, salta el gate igual que el botón "Comenzar"
+## antes de cerrar. Los activos se limpian con release() directo sobre
+## EnemyStore, no vía LaneEnemySystem — a propósito no cuentan como muerte
+## ni como leak (killed_count/leaked_count solo los toca LaneEnemySystem.tick(),
+## ver ese archivo), es un descarte de test, no un resultado de la ronda.
+func _force_finish_round() -> void:
+	if _round_state == RoundState.ROUND_COMPLETE:
+		return
+	if _round_state == RoundState.PLACEMENT:
+		_round_state = RoundState.COMBAT
+		if _start_button:
+			_start_button.visible = false
+	_enemies_spawned_this_round = _level.wave_enemy_count
+	while _enemy_store.active_count > 0:
+		_enemy_store.release(0)
+	_complete_round()
+
+## Botón "Salir al menú" (pedido del usuario, 09-ago) — sin guardado
+## todavía: el árbol de mejoras, que define qué habría que persistir, no
+## tiene ni boceto (fase3-alcance-v1.md sección 4 punto 3; guardado
+## explícitamente pausado en plan-fases.md hasta que lo tenga). Solo cambio
+## de escena.
+func _exit_to_menu() -> void:
+	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 
 ## Dos pasadas a propósito (09-ago, encontrado al medir la tarjeta de
 ## dirección fija): todo lo que coloca una torre lo hace al toque, en el
@@ -227,6 +343,14 @@ func _parse_cli_args() -> void:
 			_place_test_towers()
 		if arg == "place-all-towers":
 			_place_all_types_test()
+		if arg == "start-round":
+			# Equivalente headless/CLI del botón "Comenzar" (fase3-tarjeta-
+			# estado-ronda-v1.md sección 6). A propósito procesado en orden
+			# de línea de comandos (no en la primera pasada, que es
+			# order-independent) — colocar torres DESPUÉS de start-round en
+			# la invocación las va a rechazar (PLACEMENT ya terminó), mismo
+			# criterio que ya vale para el jugador real.
+			_start_round()
 		var parts := arg.split("=")
 		if parts.size() == 2:
 			match parts[0]:
@@ -386,6 +510,13 @@ func _enable_stress_textures() -> void:
 	_bg_tile = true
 
 func _place_tower(pos: Vector2, tower_type: int = -1) -> bool:
+	# Gate de colocación (fase3-tarjeta-estado-ronda-v1.md sección 3, ya
+	# resuelto en fase3-alcance-v1.md sección 4 punto 1: "fija durante toda
+	# la ronda"). Exento en stress-test a propósito — esa pantalla coloca
+	# programáticamente antes de que exista cualquier concepto de ronda, y
+	# la tarjeta scopea la máquina de estados a "modo normal" (sección 1).
+	if not _stress_test and _round_state != RoundState.PLACEMENT:
+		return false
 	if tower_type == -1:
 		tower_type = _selected_tower_type
 	if not _level.is_buildable(pos):
@@ -416,13 +547,8 @@ func _process(delta: float) -> void:
 
 	if _stress_test:
 		_stress_top_up_enemies()
-	else:
-		_spawn_timer -= delta
-		if _spawn_timer <= 0.0 and _enemy_store.active_count < MAX_ENEMIES:
-			_spawn_timer = SPAWN_INTERVAL
-			var idx := _enemy_store.spawn(_level.spawn_point, ENEMY_SPEED, ENEMY_HEALTH, 0.0, ENEMY_VARIANT)
-			if idx != -1:
-				_enemy_store.waypoint_index[idx] = 0
+	elif _round_state == RoundState.COMBAT:
+		_tick_round_spawner(delta)
 
 	_lane_system.tick(delta)
 	_hash.build(_enemy_store)
@@ -444,8 +570,28 @@ func _process(delta: float) -> void:
 	if _quit_after > 0.0 and _elapsed >= _quit_after:
 		if _stress_logger:
 			_stress_logger.close()
-		print("[level1] listo — torres: %d, proyectiles activos: %d, enemigos activos: %d, muertes: %d, leaks: %d" % [_tower_store.active_count, _proj_store.active_count, _enemy_store.active_count, _lane_system.killed_count, _lane_system.leaked_count])
+		print("[level1] listo — torres: %d, proyectiles activos: %d, enemigos activos: %d, muertes: %d, leaks: %d, estado: %s" % [_tower_store.active_count, _proj_store.active_count, _enemy_store.active_count, _lane_system.killed_count, _lane_system.leaked_count, RoundState.keys()[_round_state]])
 		get_tree().quit()
+
+## Spawner de la ronda normal (fase3-tarjeta-estado-ronda-v1.md sección 3) —
+## reemplaza el timer incondicional que antes corría "para siempre, desde
+## que la escena carga" (sección 1 de la tarjeta, confirmado en código antes
+## de tocar nada). Objetivo fijo (LevelDef.wave_enemy_count) en vez de una
+## curva de oleadas diseñada — la curva es calibración, fuera de alcance acá
+## (fase3-alcance-v1.md sección 5). "Ronda completa" = ya se spawneó el
+## objetivo entero Y no queda ninguno activo (muerto o leaked, ver
+## lane_enemy_system.gd) — mismo criterio textual de la tarjeta.
+func _tick_round_spawner(delta: float) -> void:
+	if _enemies_spawned_this_round < _level.wave_enemy_count:
+		_spawn_timer -= delta
+		if _spawn_timer <= 0.0 and _enemy_store.active_count < MAX_ENEMIES:
+			_spawn_timer = SPAWN_INTERVAL
+			var idx := _enemy_store.spawn(_level.spawn_point, ENEMY_SPEED, ENEMY_HEALTH, 0.0, ENEMY_VARIANT)
+			if idx != -1:
+				_enemy_store.waypoint_index[idx] = 0
+				_enemies_spawned_this_round += 1
+	elif _enemy_store.active_count == 0:
+		_complete_round()
 
 ## Sostiene ~_stress_enemies activos (fuente estilo BenchmarkSpawner —
 ## repone lo que muere/llega a la meta) en vez del spawner de a uno de la

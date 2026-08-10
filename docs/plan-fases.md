@@ -634,6 +634,53 @@ secuencia:
   propósito) arriesga rehacerlo. Se retoma cuando el árbol tenga aunque
   sea una forma preliminar.
 
+> **Mesa de Developers, 09-ago — revisión de Fase 3 pedida por el usuario:
+> de las 3 piezas de motor identificadas, una lista y ejecutada hoy, una
+> correctamente pausada, una a medio definir.** Detalle completo en
+> `fase3-motor-log.md`.
+>
+> 1. **Máquina de estados colocación/combate — implementada y verificada**
+>    (`fase3-motor-log.md` sección 1). Los 5 puntos de
+>    `fase3-tarjeta-estado-ronda-v1.md` tal cual: estados
+>    `PLACEMENT`/`COMBAT`/`ROUND_COMPLETE`, objetivo de oleada como campo
+>    nuevo en `LevelDef` (`wave_enemy_count`, placeholder funcional, no
+>    balance), botón "Comenzar" sin estilo, flag `start-round` como
+>    equivalente headless/CLI. 5 casos de regresión headless, incluido el
+>    que pide la sección 6 de la tarjeta (0 torres, `start-round`, ronda se
+>    completa sola) — los 5 pasan. `stress-test` queda intacto, la máquina
+>    de estados no lo toca (scope de la propia tarjeta). Un efecto lateral
+>    a anotar, no un bug: el baseline histórico de regresión
+>    (`place-all-towers real-stats`) ahora da 0 muertes sin `start-round`
+>    — el spawner ya no corre sin el gate, tal como se pidió. Verificación
+>    visual del botón en ventana, postergada mientras el usuario jugaba,
+>    **ya hecha** apenas avisó que estaba libre: 3 capturas (`PLACEMENT`/
+>    `COMBAT`/`ROUND_COMPLETE`, `fase3-motor-log.md` sección 1.8) confirman
+>    lo mismo que ya decía la verificación funcional, sin ajustes. Tarjeta
+>    cerrada de punta a punta.
+> 2. **Guardado/carga — confirmado pausado, no tocado.** Nada nuevo que
+>    evaluar hasta que el árbol de mejoras tenga forma, tal como ya se
+>    decidió arriba.
+> 3. **Contenido de niveles — los 4 construidos y verificados**
+>    (`fase3-motor-log.md` sección 2, actualizada). Arranqué por uno
+>    (planeta rocoso/desértico), lo verifiqué a ojo, y con la técnica ya
+>    probada seguí con los 3 restantes en el mismo movimiento — geometría
+>    original en los 4 (sin captura de referencia como tuvo el nivel 1),
+>    forma estructural distinta en cada uno (no el mismo molde repintado),
+>    paleta ajustada al tema de cada uno. En el camino encontré y corregí
+>    un hueco real de geometría en el primer intento del nivel 2 (dos
+>    tramos no consecutivos compartían rango de X sin que el conector los
+>    cubriera del todo — visible como una franja de fondo cortando el
+>    carril verde) — regla aplicada a los 5 niveles de acá en más: si dos
+>    tramos comparten rango de X, el conector cubre esa zona entera, o
+>    quedan cada uno a un lado sin competir por el mismo tramo. Ningún
+>    nivel nuevo está conectado a nada todavía — no existe selector de
+>    pantallas, `level_01.tres` sigue siendo el único que carga
+>    `Level1.tscn`; los otros 4 quedan listos como recursos verificados
+>    para cuando ese selector se construya (pieza aparte, no descompuesta
+>    en tarea de motor todavía). Regresión de `level_01.tres` confirmada
+>    limpia después de revertir el puntero temporal usado para verificar
+>    cada uno.
+
 ---
 
 ## Fase 4 — Arte real
