@@ -2,14 +2,13 @@
 
 **Rol:** Product Manager / Dirección de Desarrollo.
 **Fecha:** 09-ago-2026.
-**Estado:** captura inicial de las bases del producto, tal como las dio la
-PM — no es un plan de implementación todavía. `plan-fases.md` señalaba este
-documento como el hueco real pendiente (Fase 1 y 2 arrancaron con un memo de
-alcance, Fase 3 no tenía ninguno); esto lo cierra.
-**No arranca todavía.** `plan-fases.md` deja el cierre de Fase 2 condicionado
-al punto 4 de su criterio de cierre (banco de GPU con texturas reales en las
-24 entidades del pico, no solo una) — este documento registra alcance para
-cuando esa condición se cumpla, no antes.
+**Estado:** alcance cerrado — 09-ago-2026. Las 4 preguntas abiertas de la
+sección 4 quedaron resueltas (PM, misma fecha), una a la vez, con evaluación
+de opciones. `plan-fases.md` ya cerró Fase 2 del lado de motor (los 4 puntos
+de su criterio de cierre) — nada bloquea que Fase 3 arranque de verdad.
+**Sigue sin ser un plan de implementación ni tener números de balance** —
+eso es explícitamente fuera de alcance (sección 5), se define cuando el
+trabajo de Fase 3 arranque en la práctica.
 
 ---
 
@@ -19,16 +18,19 @@ cuando esa condición se cumpla, no antes.
    pantalla — plataforma PC, sin joystick/touch a considerar (consistente
    con la postura de un jugador ya cerrada en Fase 1). Las torretas
    disponibles para colocar son las que ya están desbloqueadas (ver
-   sección 2); una vez desbloqueada, una torreta **es libre de colocar**
-   — no hay costo de colocación individual descrito, ver pregunta abierta
-   en sección 4.
+   sección 2), dentro de las zonas de construcción del nivel
+   (`buildable_zones`, ya existe en `LevelDef`). **Sin costo de colocación
+   — resuelto, ver sección 4, punto 1.**
 2. **Botón "Comenzar":** el jugador decide cuándo terminó de colocar y
    arranca la ronda explícitamente — no hay spawn de enemigos hasta ese
    click.
 3. **La ronda:** enemigos salen y avanzan por el carril (ya implementado,
    `LaneEnemySystem`); las torretas ya colocadas hacen su trabajo sin
-   intervención del jugador durante la ronda (no hay mención de acciones
-   del jugador *durante* el combate — colocar es antes, no en vivo).
+   intervención del jugador durante la ronda — **confirmado, sección 4
+   punto 1: la colocación es fija una vez arrancada la ronda, no se puede
+   mover/agregar/quitar torres en vivo.** Posible excepción, sin decidir
+   todavía: boosts temporales (cadencia, daño) aplicables durante la ronda
+   — no es colocación, es un sistema aparte a evaluar.
 4. **Puntos:** cada enemigo eliminado otorga puntos. Los puntos son la
    moneda que desbloquea mejoras/torretas nuevas (sección 2) — no está
    dicho todavía si también sirven para algo dentro de la ronda misma.
@@ -81,30 +83,49 @@ una línea más de la lista.
 
 ---
 
-## 4. Preguntas abiertas — no las estoy respondiendo acá, quedan para cuando Fase 3 arranque
+## 4. Preguntas abiertas — resueltas, 09-ago
 
 1. **¿Hay costo de colocación dentro de la ronda, además del desbloqueo
-   meta?** El mensaje de la PM dice "una vez que está desbloqueada está
-   libre para usar" — leo eso como "sin costo por placement", pero vale
-   confirmarlo explícitamente antes de diseñar la economía, porque cambia
-   la superficie de balance por completo (si no hay costo por torreta, el
-   límite real de poder del jugador es 100% la cantidad de slots
-   desbloqueados, no un presupuesto por ronda).
-2. **¿Cuántas pantallas/niveles van a existir, y qué poder hace falta para
-   cada una?** Ya estaba anotado como pregunta abierta por la propia PM en
-   esta misma conversación — `LevelDef` tiene el campo de fondo listo desde
-   Fase 2, pero hoy solo existe contenido real para una (`level_01.tres`).
-3. **¿Las mejoras del árbol son permanentes (cuentan para toda partida
-   futura) o por-run (se resetean)?** No especificado todavía — determina
-   si hace falta un sistema de guardado persistente (más pesado) o alcanza
-   con estado en memoria por sesión de juego (más liviano, parecido a lo
-   que ya existe).
-4. **¿Calibración de combate (HP/daño real, no los valores de prueba de
-   `TOWER_TYPE_STATS`) se hace antes o junto con la progresión?** Probable
-   que tengan que iterar juntas (el desbloqueo determina qué poder tiene el
-   jugador en cada punto, lo cual determina cuánta vida/daño necesitan los
-   enemigos de cada nivel) — no es estrictamente secuencial, vale anotarlo
-   para no tratarlas como dos tareas independientes.
+   meta? — RESUELTO (PM, 09-ago).** Sin costo por torreta individual. El
+   límite real de poder es la **cantidad de torres colocables**, atada al
+   **nivel de jugador** (meta-progresión, no el nivel/pantalla de la
+   sección 4 punto 2 — son dos conceptos de "nivel" distintos, hay que
+   mantenerlos separados en el vocabulario del proyecto de acá en más).
+   Ejemplo dado: nivel de jugador 1 = 1 torre colocable; la curva exacta
+   queda para calibración, no para este documento. La colocación ocurre
+   una sola vez, al inicio de la partida (antes de "Comenzar", sección 1) y
+   **es fija durante toda la ronda** — no se puede mover, agregar ni quitar
+   una vez arrancada.
+   > **Sub-pregunta nueva, abierta, no decidida:** ¿boosts temporales
+   > (cadencia, daño, u otros) aplicables *durante* la ronda, sin que
+   > cuenten como re-colocación? Explícitamente "a evaluar" — no es parte
+   > de esta resolución, es una idea separada para cuando se calibre
+   > progresión/combate.
+2. **¿Cuántas pantallas/niveles van a existir? — RESUELTO, cantidad (PM,
+   09-ago).** **5**, reusando la progresión temática ya propuesta en
+   `diseno-grafico.md` sección 2: luna helada (entrada) → planeta rocoso/
+   desértico → luna/jungla alienígena → gigante gaseoso → estrella (clímax).
+   Ese documento la había dejado como "plantilla reusable, no un conteo
+   final" — queda promovida a número de trabajo. `LevelDef` tiene el campo
+   de fondo listo desde Fase 2; hoy solo existe contenido real para el
+   primero (`level_01.tres`), faltan los otros 4. **Qué poder hace falta
+   para cada una queda para calibración** (fuera de alcance de este
+   documento, sección 5) — la cantidad no prejuzga la curva.
+3. **¿Las mejoras del árbol son permanentes o por-run? — RESUELTO
+   (PM, 09-ago). Permanentes.** Coherente con la referencia a Path of Exile
+   de la sección 3 y con "el jugador progresa" de la sección 2. **Implica
+   que Fase 3 necesita un sistema de guardado/carga de punta a punta** —
+   hoy no existe ninguno (todo lo de Fase 2 vive en memoria, muere con el
+   proceso). No es una extensión de algo ya armado, es pieza nueva; vale
+   tratarla como su propio sub-alcance de motor dentro de Fase 3, mismo
+   criterio que la sección 3 ya aplicó al árbol de mejoras en sí.
+4. **¿Calibración de combate se hace antes o junto con la progresión? —
+   RESUELTO (PM, 09-ago). Juntas, en ciclos cortos.** Confirma la lectura
+   que ya traía esta sección: no se fija la curva de progresión a ciegas ni
+   se calibra HP/daño contra una composición hipotética — prototipo mínimo
+   de ambas a la vez, ajustado en el mismo ciclo de playtesting. Mismo
+   criterio de "medir en vez de apostar" que ya usó el proyecto para T2, la
+   técnica de ilustración, y el resto de las decisiones de Fase 1/2.
 
 ---
 
@@ -112,5 +133,26 @@ una línea más de la lista.
 
 Calibración numérica de cualquier cosa (vida, daño, costos de desbloqueo,
 nodos del árbol) — esto es alcance, no números. Los números se definen
-cuando Fase 3 arranque de verdad, con el motor ya cerrado del todo
-(`plan-fases.md`, punto 4 pendiente).
+cuando el trabajo de Fase 3 arranque en la práctica, en ciclos cortos junto
+con combate (sección 4, punto 4) — no antes.
+
+---
+
+## 6. Qué pide esto de motor, ahora que el alcance está cerrado
+
+Tres piezas nuevas, ninguna es extensión de algo que ya exista — para que
+Dirección de Desarrollo pueda armar tarjetas de trabajo directo desde acá:
+
+1. **Máquina de estados colocación/combate** (sección 1) — gate explícito
+   por botón "Comenzar", `level_controller.gd` no lo tiene hoy.
+2. **Sistema de guardado/carga** (secciones 2 y 4 punto 3) — desbloqueos y
+   árbol de mejoras son permanentes, todo lo de Fase 2 es estado en memoria
+   que muere con el proceso.
+3. **4 niveles de contenido nuevos** (sección 4 punto 2) — `LevelDef` ya
+   soporta el campo de fondo, falta el contenido real de planeta rocoso,
+   jungla alienígena, gigante gaseoso y estrella (solo existe `level_01.tres`).
+
+El árbol de mejoras en sí (sección 3) y la UI de jugador que necesita son,
+por tamaño, su propio sub-alcance — no lo desglosé en tareas de motor acá
+porque calibración/combate lo va a moldear en el mismo ciclo corto de la
+sección 4 punto 4, no antes.
