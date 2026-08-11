@@ -30,6 +30,12 @@ const DEFAULT_STATE := {
 	"gold": 0,
 	"total_kills": 0,
 	"unlocked_talent_ids": [],
+	# Qué planeta alcanzaste (fase3-tarjeta-ganable-v1.md sección 2) —
+	# índice en level_controller.gd::LEVEL_PATHS, 0-4. Deliberadamente
+	# distinto de player_level: ese es la meta-progresión de slots de
+	# torre, esto es progreso de campaña — mismo cuidado de vocabulario
+	# que ya pidió fase3-alcance-v1.md sección 4 punto 1.
+	"stage_index": 0,
 }
 
 var state: Dictionary = {}

@@ -6,7 +6,18 @@ extends Node2D
 ## el jugador coloca torres en la zona gris (buildable_zones); las torres
 ## reutilizan ProjectileStore/ProjectileSystem tal como los dejó Sprint 2.
 
-const LEVEL_DEF := preload("res://data/level_01.tres")
+## Encadenado de niveles (fase3-tarjeta-ganable-v1.md sección 2) — ya no
+## hay un LevelDef fijo, se carga el que corresponda a
+## SaveManager.state["stage_index"] (0-4). Los 5 recursos ya existían,
+## construidos y verificados en fase3-motor-log.md sección 2 — esta
+## tarjeta los conecta, no los crea.
+const LEVEL_PATHS := [
+	"res://data/level_01.tres",
+	"res://data/level_02.tres",
+	"res://data/level_03.tres",
+	"res://data/level_04.tres",
+	"res://data/level_05.tres",
+]
 
 ## Subido de 360 a 2.500 (09-ago) — el tope viejo (300 + margen) nunca se
 ## pensó contra el objetivo de escala real de T2/T4 (2.000-2.400), solo
@@ -77,8 +88,19 @@ var _selected_tower_type: int = 0  # teclas 1-4 lo cambian — ver _unhandled_in
 ## stress-test a propósito (sección 1 de la tarjeta: "modo normal, no
 ## stress-test") — esa pantalla nunca toca _round_state, sigue corriendo
 ## exactamente igual que antes de esta tarjeta.
-enum RoundState { PLACEMENT, COMBAT, ROUND_COMPLETE }
+## ROUND_LOST (fase3-tarjeta-ganable-v1.md sección 1) — paralelo a
+## ROUND_COMPLETE, no lo reemplaza: vidas a 0 durante COMBAT.
+enum RoundState { PLACEMENT, COMBAT, ROUND_COMPLETE, ROUND_LOST }
 var _round_state: RoundState = RoundState.PLACEMENT
+
+## Vidas (fase3-tarjeta-ganable-v1.md sección 1) — placeholder sin
+## calibrar, se resetea al máximo al empezar cada ronda (_start_round()),
+## no se arrastra entre niveles. `lives=<n>` (CLI) pisa el default para
+## poder forzar derrota rápido en verificación.
+var _max_lives := 20
+var _lives := 0
+var _leaked_at_round_start := 0
+var _lives_label: Label = null
 var _enemies_spawned_this_round: int = 0
 var _start_button: Button = null
 var _test_button: Button = null
@@ -141,6 +163,20 @@ var _backend_native := true
 ## aislar la medición de población del balance de combate.
 const STRESS_ENEMY_HEALTH := 600.0
 
+## Resuelve qué LevelDef cargar antes de construir nada (los sistemas de
+## abajo necesitan _level.waypoints/etc. desde el arranque, no se puede
+## resolver esto en la segunda pasada de _parse_cli_args() como el resto de
+## los flags). `stage=<n>` (CLI) pisa el guardado sin persistirlo — para
+## poder probar un nivel puntual sin tener que ganar la cadena entera.
+func _load_level_for_stage() -> LevelDef:
+	var stage: int = SaveManager.state["stage_index"]
+	for arg in OS.get_cmdline_user_args():
+		var parts := arg.split("=")
+		if parts.size() == 2 and parts[0] == "stage":
+			stage = parts[1].to_int()
+	stage = clampi(stage, 0, LEVEL_PATHS.size() - 1)
+	return load(LEVEL_PATHS[stage])
+
 func _ready() -> void:
 	# Mismo fix que stress_main.gd (fase2-vfx-benchmark.md sección 3) — sin
 	# esto, a población baja/moderada el frame time mide el refresco del
@@ -150,7 +186,7 @@ func _ready() -> void:
 	# hoy. No aplica en --headless.
 	if DisplayServer.get_name() != "headless":
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	_level = LEVEL_DEF
+	_level = _load_level_for_stage()
 
 	_enemy_store = EnemyStore.new(MAX_ENEMIES)
 	_proj_store = ProjectileStore.new(MAX_PROJ)
@@ -229,6 +265,11 @@ func _setup_round_ui() -> void:
 	_exit_button.pressed.connect(_exit_to_menu)
 	layer.add_child(_exit_button)
 
+	_lives_label = Label.new()
+	_lives_label.position = Vector2(20, 170)
+	layer.add_child(_lives_label)
+	_refresh_lives_label()
+
 	add_child(layer)
 
 ## Gate único PLACEMENT→COMBAT (fase3-tarjeta-estado-ronda-v1.md sección 3).
@@ -243,14 +284,21 @@ func _start_round() -> void:
 	_round_state = RoundState.COMBAT
 	if _start_button:
 		_start_button.visible = false
+	# Vidas (fase3-tarjeta-ganable-v1.md sección 1): al máximo acá, no en
+	# _ready() — "se resetea al máximo al empezar cada ronda", no al cargar
+	# la escena (hoy son lo mismo porque solo hay una ronda por escena,
+	# pero la tarjeta lo pide en este punto específico, no por accidente
+	# de dónde coincida hoy). Snapshot de leaked_count para poder leer el
+	# delta de esta ronda sin tocar LaneEnemySystem.
+	_lives = _max_lives
+	_leaked_at_round_start = _lane_system.leaked_count
+	_refresh_lives_label()
 
 ## Marca la ronda completa (fase3-tarjeta-estado-ronda-v1.md sección 5): "al
 ## agotar el objetivo, loguear/marcar 'ronda completa' de forma verificable"
-## es el mínimo aceptable de esta tarjeta — qué pasa después (¿otra ronda?
-## ¿fin de sesión?) queda como pregunta abierta para la PM, no se decide
-## acá. El texto/disabled del botón es una cortesía barata para que un
-## jugador real no se quede mirando una pantalla sin ninguna señal, no una
-## pantalla de resultados de verdad (eso sigue siendo Fase 4).
+## es el mínimo aceptable de esa tarjeta. `_advance_stage_and_continue()`
+## (fase3-tarjeta-ganable-v1.md sección 2) resuelve la pregunta que esa
+## tarjeta dejaba abierta ("¿otra ronda? ¿fin de sesión?") — gana, avanza.
 func _complete_round() -> void:
 	if _round_state != RoundState.COMBAT:
 		return
@@ -271,6 +319,65 @@ func _complete_round() -> void:
 	SaveManager.add_gold(GOLD_PER_ROUND)
 	SaveManager.add_kills(_lane_system.killed_count)
 	print("[level1] ronda completa — objetivo: %d, muertes: %d, leaks: %d, oro ganado: %d" % [_level.wave_enemy_count, _lane_system.killed_count, _lane_system.leaked_count, GOLD_PER_ROUND])
+	_advance_stage_and_continue()
+
+## Encadenado (fase3-tarjeta-ganable-v1.md sección 2): ganar avanza
+## stage_index (tope al último nivel, no lo pasa de largo) y recarga esta
+## misma escena — _load_level_for_stage() en el próximo _ready() va a leer
+## el valor ya incrementado y cargar el LevelDef que corresponda. Ganar el
+## último nivel (ya estaba en el tope) vuelve a MainMenu en cambio —
+## "pantalla de victoria final" es Fase 4, no bloquea esto (sección 3 de la
+## tarjeta). Delay corto solo para que "Ronda completa" se alcance a ver un
+## instante, no una pantalla de resultados real.
+func _advance_stage_and_continue() -> void:
+	var was_last: bool = SaveManager.state["stage_index"] >= LEVEL_PATHS.size() - 1
+	if not was_last:
+		SaveManager.state["stage_index"] += 1
+		SaveManager.save_game()
+	await get_tree().create_timer(1.5).timeout
+	if was_last:
+		get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
+	else:
+		get_tree().change_scene_to_file("res://scenes/Level1.tscn")
+
+## Derrota (fase3-tarjeta-ganable-v1.md sección 1): vidas a 0 durante
+## COMBAT, antes de agotar la oleada — paralelo a _complete_round(), no lo
+## reemplaza. Sin oro ("se puede reconsiderar en calibración, no ahora",
+## tal como pide la tarjeta). No avanza stage_index — la próxima vez se
+## reintenta el mismo nivel. Sin pantalla de derrota diseñada (Fase 4);
+## salida es la misma que ya existe, "Salir al menú".
+func _lose_round() -> void:
+	if _round_state != RoundState.COMBAT:
+		return
+	_round_state = RoundState.ROUND_LOST
+	if _start_button:
+		_start_button.text = "Derrota"
+		_start_button.disabled = true
+		_start_button.visible = true
+	if _test_button:
+		_test_button.disabled = true
+	print("[level1] derrota — vidas agotadas, muertes: %d, leaks: %d" % [_lane_system.killed_count, _lane_system.leaked_count])
+
+## Lee el delta de leaks desde el inicio de la ronda (sin tocar
+## LaneEnemySystem, tal como pide la tarjeta) y recalcula vidas desde cero
+## cada vez — recomputar en vez de descontar de a uno cubre el caso de
+## varios leaks en el mismo frame sin necesitar un hook por evento.
+## Devuelve true si la derrota se disparó este llamado (para que
+## _tick_round_spawner() no siga evaluando victoria en el mismo frame).
+func _check_defeat() -> bool:
+	var leaks_this_round := _lane_system.leaked_count - _leaked_at_round_start
+	var lives_now := maxi(_max_lives - leaks_this_round, 0)
+	if lives_now != _lives:
+		_lives = lives_now
+		_refresh_lives_label()
+	if _lives <= 0:
+		_lose_round()
+		return true
+	return false
+
+func _refresh_lives_label() -> void:
+	if _lives_label:
+		_lives_label.text = "Vidas: %d" % _lives
 
 ## Botón "TEST: Finalizar ronda" (pedido del usuario, 09-ago) — atajo para
 ## no esperar a que la oleada real se agote durante testing manual. Si
@@ -279,11 +386,17 @@ func _complete_round() -> void:
 ## EnemyStore, no vía LaneEnemySystem — a propósito no cuentan como muerte
 ## ni como leak (killed_count/leaked_count solo los toca LaneEnemySystem.tick(),
 ## ver ese archivo), es un descarte de test, no un resultado de la ronda.
+## Guard extendido a ROUND_LOST (fase3-tarjeta-ganable-v1.md): antes solo
+## chequeaba ROUND_COMPLETE — sin esto, este atajo podía pisar una derrota
+## ya disparada con una victoria forzada.
 func _force_finish_round() -> void:
-	if _round_state == RoundState.ROUND_COMPLETE:
+	if _round_state == RoundState.ROUND_COMPLETE or _round_state == RoundState.ROUND_LOST:
 		return
 	if _round_state == RoundState.PLACEMENT:
 		_round_state = RoundState.COMBAT
+		_lives = _max_lives
+		_leaked_at_round_start = _lane_system.leaked_count
+		_refresh_lives_label()
 		if _start_button:
 			_start_button.visible = false
 	_enemies_spawned_this_round = _level.wave_enemy_count
@@ -352,6 +465,12 @@ func _parse_cli_args() -> void:
 					# de comparación (fase2-benchmark-conjunto.md sección
 					# 13/14), no para uso normal.
 					_backend_native = parts[1] != "gdscript"
+				"lives":
+					# Override de _max_lives (fase3-tarjeta-ganable-v1.md
+					# sección 4, "forzar derrota") — primera pasada porque
+					# _start_round()/_force_finish_round() lo leen antes de
+					# que la segunda pasada pueda procesar nada.
+					_max_lives = parts[1].to_int()
 
 	if _stress_test:
 		_setup_stress_test()
@@ -599,7 +718,7 @@ func _process(delta: float) -> void:
 	if _quit_after > 0.0 and _elapsed >= _quit_after:
 		if _stress_logger:
 			_stress_logger.close()
-		print("[level1] listo — torres: %d, proyectiles activos: %d, enemigos activos: %d, muertes: %d, leaks: %d, estado: %s" % [_tower_store.active_count, _proj_store.active_count, _enemy_store.active_count, _lane_system.killed_count, _lane_system.leaked_count, RoundState.keys()[_round_state]])
+		print("[level1] listo — torres: %d, proyectiles activos: %d, enemigos activos: %d, muertes: %d, leaks: %d, estado: %s, vidas: %d, stage: %d" % [_tower_store.active_count, _proj_store.active_count, _enemy_store.active_count, _lane_system.killed_count, _lane_system.leaked_count, RoundState.keys()[_round_state], _lives, SaveManager.state["stage_index"]])
 		get_tree().quit()
 
 ## Spawner de la ronda normal (fase3-tarjeta-estado-ronda-v1.md sección 3) —
@@ -611,6 +730,8 @@ func _process(delta: float) -> void:
 ## objetivo entero Y no queda ninguno activo (muerto o leaked, ver
 ## lane_enemy_system.gd) — mismo criterio textual de la tarjeta.
 func _tick_round_spawner(delta: float) -> void:
+	if _check_defeat():
+		return
 	if _enemies_spawned_this_round < _level.wave_enemy_count:
 		_spawn_timer -= delta
 		if _spawn_timer <= 0.0 and _enemy_store.active_count < MAX_ENEMIES:

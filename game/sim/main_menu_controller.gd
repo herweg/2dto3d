@@ -127,4 +127,7 @@ func _on_tabula_rasa_pressed() -> void:
 
 func _refresh_status() -> void:
 	var s := SaveManager.state
-	_status_label.text = "Nivel: %d   Oro: %d   Bajas totales: %d" % [s["player_level"], s["gold"], s["total_kills"]]
+	# Planeta: stage_index+1 (1-5), tal como pide fase3-tarjeta-ganable-v1.md
+	# — el índice guardado es 0-4, pero mostrar "Planeta 0" confundiría a
+	# cualquiera que no sepa que es 0-based.
+	_status_label.text = "Nivel: %d   Oro: %d   Bajas totales: %d   Planeta: %d/5" % [s["player_level"], s["gold"], s["total_kills"], int(s["stage_index"]) + 1]
