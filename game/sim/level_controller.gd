@@ -758,6 +758,9 @@ func _enable_stress_textures() -> void:
 	_level.background_texture = bg_tex
 	_bg_tile = true
 
+	var proj_tex := load(STRESS_BG_TEX)
+	_proj_render.set_sprite(proj_tex, proj_tex)
+
 func _place_tower(pos: Vector2, tower_type: int = -1) -> bool:
 	# Gate de colocación (fase3-tarjeta-estado-ronda-v1.md sección 3, ya
 	# resuelto en fase3-alcance-v1.md sección 4 punto 1: "fija durante toda
