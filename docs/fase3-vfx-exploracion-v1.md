@@ -50,54 +50,125 @@ una decisión de forma/aspecto (le toca a Arte, no es una prueba de costo
 de GPU) más que algo para prototipar acá. Queda anotado para cuando
 Arte lo evalúe, no es parte de esta tarjeta.
 
-## 2. Metodología — corregida (PM, 10-ago): dos escalones, no uno
+## 2. Por qué separé mal la escala de la cadencia (corrección, PM, 10-ago)
 
-**Corrección sobre la sección original.** Había propuesto medir solo
-contra 20-24 torres (el objetivo ya validado de Fase 2), descartando el
-escenario de ~100 torres por venir del arnés de estrés diseñado para
-forzar el techo del motor. La PM señaló algo que no separé bien: **100
-torres no es en sí mismo un número patológico — es la escala plausible de
+Había descartado medir contra ~100 torres por venir del arnés de estrés
+que forzaba el techo del motor. La PM separó lo que yo no había separado:
+**100 torres no es en sí un número patológico — es la escala plausible de
 la última pantalla real**, una vez que la progresión desbloquee
 suficientes slots. Lo patológico de las secciones 13-16 no era la
 *cantidad* de torres, era la **cadencia forzada**
-(`DEV_FIRE_RATE_OVERRIDE` a 0.004s, ~150-400× la real) para empujar
-proyectiles — ese sigue sin corresponder acá. Mezclé las dos cosas, las
-separo:
+(`DEV_FIRE_RATE_OVERRIDE` a 0.004s, ~150-400× la real). Ese eje sigue sin
+corresponder acá — las 4 fases de abajo, en ambos escenarios de
+población, corren siempre con `real-stats` (cadencia y rango reales, sin
+pisar nada).
 
-1. **Costo unitario:** cada efecto solo, pocas instancias — igual que
-   siempre, sin cambios.
-2. **Escenario cercano — 20-24 torres reales, ~2.000-2.400 enemigos,
-   `fire_rate` sin pisar.** Lo que va a existir primero, y contra lo que
-   la calibración de combate ya en curso va a trabajar.
-3. **Escenario de escala — ~100 torres reales (número de trabajo, no
-   definitivo — puede terminar siendo 50 o más), ~2.000 enemigos,
-   `fire_rate` sin pisar igual, rango real (no `DEV_RANGE_OVERRIDE`).**
-   Ni la cantidad de torres ni la de enemigos se fuerzan — solo se
-   escala la composición manteniendo la cadencia real, que es
-   exactamente lo que estas VFX van a disparar de verdad en el juego
-   final. Corre en paralelo al 2, no en vez de.
-4. **Si algo cuesta en el escalón 3 pero no en el 2** — no es motivo
-   para descartar el efecto, es información para decidir si necesita un
-   límite (ej. tope de instancias simultáneas) antes de llegar a esa
-   escala, mismo espíritu que ya usó `ZONE_FIXED_COUNT` para proyectiles
-   de zona.
-5. **Aislar cuál, no un número agregado** — misma disciplina de siempre.
+**Sobre "los enemigos no son tan costosos, es un poco irrelevante" (PM)
+— cierto en general, con una excepción puntual.** Renderizado y
+simulación de enemigos son baratos (costo por tipo de textura, no por
+instancia), y desde que recto/perforante/splash dejaron de llamar
+`_find_nearest_enemy()` (disparo en dirección fija), el costo de
+targeting que sí escalaba con enemigos quedó acotado a homing/misil
+nomás — la población de enemigos pesa mucho menos que cuando se midió
+por primera vez. **Pero determina directo cuántas "quemaduras"
+simultáneas puede haber en pantalla** — la única de las 4 variables de
+esta tarjeta donde el conteo de enemigos sigue siendo justo lo que hay
+que medir.
 
-**Sobre "los enemigos no son tan costosos, es un poco irrelevante"
-(PM) — cierto en general, pero no para el efecto #1 específicamente.**
-Renderizado y simulación de enemigos son baratos (costo por tipo de
-textura, no por instancia — confirmado varias veces ya) y desde que
-recto/perforante/splash dejaron de llamar `_find_nearest_enemy()`
-(`plan-fases.md`, disparo en dirección fija), el costo de targeting que
-sí escalaba con cantidad de enemigos quedó acotado a homing/misil
-solamente — la población de enemigos importa mucho menos hoy que cuando
-se midió por primera vez. **Pero la cantidad de enemigos determina
-directo cuántas "quemaduras" simultáneas puede haber en pantalla** (un
-efecto sostenido por enemigo con DoT activo) — es la única de las 4
-variables de esta tarjeta donde el conteo de enemigos sigue siendo la
-variable que importa medir, no una que se pueda ignorar de entrada.
+## 3. Las 4 fases, qué armar en cada una, y el test que la valida
 
-## 3. Qué no es esta tarjeta
+Ninguna fase se salta — cada una depende de que la anterior haya pasado.
+Todas con `backend=native` (ya default) y `real-stats` (cadencia/rango
+sin pisar, en todas las fases, incluida la de escala).
+
+### Fase 0 — Construir el placeholder de cada efecto
+
+Geometría/color simple (`GPUParticles2D` de un color plano, o un shader
+de tinte para la quemadura) — no arte final, mismo criterio que ya se usó
+para probar sprite de torreta antes de que existiera arte real. Cuatro
+flags nuevos, uno por efecto, para poder aislar en la Fase 4 sin
+reconstruir nada: `vfx-burn=1`, `vfx-explosion=1`, `vfx-spark=1`,
+`vfx-death=1`. Un quinto, `vfx-real=1`, activa los 4 juntos — el que se
+usa en las Fases 2 y 3.
+
+**No es una fase de medición** — es la que arma lo que las otras 3 miden.
+
+### Fase 1 — Costo unitario (correctness, no performance)
+
+**Cómo armar:** una escena chica, un puñado de torres/enemigos, cada
+efecto encendido de a uno (`vfx-burn=1` solo, después `vfx-explosion=1`
+solo, etc.) — no los 4 juntos todavía.
+
+**Qué valida la idea:** que el efecto dispara donde y cuando corresponde,
+no que sea barato — eso lo miden las Fases 2/3. Checklist, los 4 tienen
+que cumplir los tres puntos:
+- Aparece exactamente en el evento que le corresponde (quemadura nace/
+  muere con `dot_time_left`, explosión en el punto de impacto de área,
+  chispa en el punto de impacto normal, muerte en la posición del
+  enemigo al llegar a 0 de vida) — verificado por captura, no a ojo en
+  vivo.
+- Ninguno deja rastro después de que su condición ya no aplica (quemadura
+  que sigue prendida sin DoT activo = falla).
+- Cero errores de consola en una corrida headless corta con los 4 flags
+  encendidos a la vez, aunque sea con población mínima.
+
+**No pasa a Fase 2 ningún efecto que falle cualquiera de los tres.**
+
+### Fase 2 — Escenario cercano (20-24 torres reales)
+
+**Cómo armar:** `stress-test stress-towers=24 stress-enemies=2400
+real-stats vfx-real=1`, ventana, Vulkan real, backend nativo (default).
+
+**Primero, sin VFX, en la misma sesión** — no reusar un número viejo:
+demasiado cambió desde la última vez que se midió este punto exacto
+(disparo en dirección fija, backend nativo por default) para confiar en
+un piso de hace varios commits. Correr el mismo escenario sin
+`vfx-real=1` primero, ese es el piso de referencia de hoy.
+
+**Qué valida la idea:**
+- **Piso con los 4 VFX ≥ 60fps** — la vara de siempre en este proyecto,
+  sin excepción para VFX.
+- Delta contra el piso sin VFX medido en el mismo paso, reportado aunque
+  sea chico — igual que se hizo con el costo de las 8 texturas (~3%), un
+  número de referencia para lo que sigue, no solo un pass/fail.
+
+Si no pasa, no se sigue a Fase 3 sin antes pasar por Fase 4 (aislar cuál).
+
+### Fase 3 — Escenario de escala (~100 torres reales)
+
+**Cómo armar:** `stress-test stress-towers=100 stress-enemies=2000
+real-stats vfx-real=1` — mismo criterio, `real-stats` sin pisar. **Dato
+nuevo, no medido todavía:** nunca se corrió este escenario exacto (100
+torres a cadencia real, sin forzar) ni siquiera sin VFX — las secciones
+13-16 siempre forzaron la cadencia. Primer paso acá es esa corrida sin
+VFX, antes de agregar nada.
+
+**Qué valida la idea — vara más blanda que la Fase 2, a propósito:** esta
+escala es "número de trabajo, no compromiso tomado"
+(`plan-fases.md`) — no es un objetivo ya comprometido como 20-24 torres.
+- Si el piso (con y sin VFX) ya está por debajo de 60fps **incluso sin
+  VFX**, el problema es de escala en sí, no de estos efectos — se anota
+  y no bloquea nada de esta tarjeta (es la misma discusión de brute-force
+  targeting que ya quedó pendiente, condicionada a que la calibración de
+  combate se acerque a esta composición).
+- Si el piso sin VFX está bien pero cae con VFX, sí es información
+  directa de esta tarjeta — pasa a Fase 4.
+
+### Fase 4 — Aislar cuál, si algo no pasó en Fase 2 o 3
+
+**Cómo armar:** repetir el escenario que falló, un flag a la vez
+(`vfx-burn=1` solo, `vfx-explosion=1` solo, etc.) en vez de los 4 juntos
+— mismo método que ya separó backend de targeting, y captura de pantalla
+de dip periódico.
+
+**Qué valida la idea:** identifica qué efecto explica la caída y cuánto,
+no solo que "algo" cuesta. Con eso: (a) si es la quemadura y el costo
+crece con cantidad de enemigos con DoT simultáneo, la palanca es un tope
+de instancias (mismo patrón que `ZONE_FIXED_COUNT` para proyectiles de
+zona), no descartar el efecto; (b) si es otro, se decide caso por caso
+cuando aparezca el dato, no antes.
+
+## 4. Qué no es esta tarjeta
 
 No es arte final — reusar geometría/color simple (un `GPUParticles2D`
 placeholder, un shader de tinte) alcanza, igual que se hizo para probar
