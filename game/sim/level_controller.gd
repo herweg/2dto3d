@@ -28,6 +28,11 @@ const ENEMY_HEALTH := 20.0
 const ENEMY_VARIANT := 0
 const SPAWN_INTERVAL := 1.2
 
+## Placeholder (pedido del usuario, 10-ago: "si lo haces ponele un
+## arbitrario 10 por ronda") — economía real de progresión sigue sin
+## calibrar (fase3-alcance-v1.md sección 2).
+const GOLD_PER_ROUND := 10
+
 const TOWER_MIN_SPACING := 48.0
 const SPATIAL_CELL_SIZE := 48.0
 
@@ -256,7 +261,16 @@ func _complete_round() -> void:
 		_start_button.visible = true
 	if _test_button:
 		_test_button.disabled = true
-	print("[level1] ronda completa — objetivo: %d, muertes: %d, leaks: %d" % [_level.wave_enemy_count, _lane_system.killed_count, _lane_system.leaked_count])
+	# Guardado (pedido del usuario, 10-ago): oro placeholder fijo por ronda
+	# (GOLD_PER_ROUND, sin economía calibrada — mismo criterio que el resto
+	# de números de esta tarjeta) + bajas totales acumuladas. Se dispara
+	# acá, no en el spawner normal, para que el atajo de test
+	# ("TEST: Finalizar ronda") también las otorgue — reusa _complete_round()
+	# sin duplicar el guard de arriba, mismo criterio que ya documentaba esa
+	# función.
+	SaveManager.add_gold(GOLD_PER_ROUND)
+	SaveManager.add_kills(_lane_system.killed_count)
+	print("[level1] ronda completa — objetivo: %d, muertes: %d, leaks: %d, oro ganado: %d" % [_level.wave_enemy_count, _lane_system.killed_count, _lane_system.leaked_count, GOLD_PER_ROUND])
 
 ## Botón "TEST: Finalizar ronda" (pedido del usuario, 09-ago) — atajo para
 ## no esperar a que la oleada real se agote durante testing manual. Si

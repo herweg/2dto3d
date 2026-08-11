@@ -5,6 +5,16 @@ extends Node2D
 ## de level_controller.gd): funcional, sin estilo, construida en _ready(),
 ## la pantalla real es Fase 4. Objetivo real es no depender de arrancar
 ## siempre directo en Level1.tscn para poder testear.
+##
+## Estado de partida (10-ago, SaveManager autoload) — status en la esquina
+## para poder verificar a ojo que persiste entre sesiones sin abrir el
+## JSON a mano, y botón "Tabula Rasa" para borrarlo todo. Pedido explícito
+## del usuario: el botón va sin ningún texto que explique qué hace más
+## allá de su nombre — a propósito, no un olvido — separado del resto con
+## espacio de sobra para no aparecer como "un botón más" sin necesitar
+## explicarlo con palabras.
+
+var _status_label: Label
 
 func _ready() -> void:
 	var layer := CanvasLayer.new()
@@ -14,6 +24,11 @@ func _ready() -> void:
 	title.position = Vector2(560, 220)
 	title.add_theme_font_size_override("font_size", 32)
 	layer.add_child(title)
+
+	_status_label = Label.new()
+	_status_label.position = Vector2(20, 16)
+	layer.add_child(_status_label)
+	_refresh_status()
 
 	var start_button := Button.new()
 	start_button.text = "Start"
@@ -36,12 +51,32 @@ func _ready() -> void:
 	exit_button.pressed.connect(_on_exit_pressed)
 	layer.add_child(exit_button)
 
+	var tabula_rasa_button := Button.new()
+	tabula_rasa_button.text = "Tabula Rasa"
+	tabula_rasa_button.position = Vector2(580, 540)
+	tabula_rasa_button.size = Vector2(120, 44)
+	tabula_rasa_button.pressed.connect(_on_tabula_rasa_pressed)
+	layer.add_child(tabula_rasa_button)
+
 	add_child(layer)
 
 	# Verificación visual sin depender de mirar la ventana en vivo — mismo
 	# criterio que level_controller.gd/stress_main.gd (Mesa de Developers,
 	# revisión del commit f0cfa56). Esta pantalla no lo tenía.
 	for arg in OS.get_cmdline_user_args():
+		if arg == "tabula-rasa":
+			# Equivalente headless/CLI del botón — no navega, se puede
+			# combinar sin riesgo con otros flags de esta misma pantalla.
+			_on_tabula_rasa_pressed()
+		var parts := arg.split("=")
+		if parts.size() == 2 and parts[0] == "set-level":
+			# No hay ninguna mecánica que suba de nivel todavía
+			# (fase3-alcance-v1.md sección 2, sin calibrar) — este flag
+			# solo existe para probar que player_level persiste, no
+			# simula progresión real.
+			SaveManager.state["player_level"] = parts[1].to_int()
+			SaveManager.save_game()
+			_refresh_status()
 		if arg == "screenshot-quit":
 			await get_tree().process_frame
 			await get_tree().process_frame
@@ -81,3 +116,15 @@ func _on_talents_pressed() -> void:
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
+
+## "Tabula Rasa" (pedido del usuario, 10-ago) — sin confirmación, a
+## propósito (mismo pedido: nada que explique qué hace más allá del
+## nombre). Refresca el status en pantalla al toque, para que el efecto
+## sea visible sin tener que salir y volver a entrar.
+func _on_tabula_rasa_pressed() -> void:
+	SaveManager.wipe_all_data()
+	_refresh_status()
+
+func _refresh_status() -> void:
+	var s := SaveManager.state
+	_status_label.text = "Nivel: %d   Oro: %d   Bajas totales: %d" % [s["player_level"], s["gold"], s["total_kills"]]

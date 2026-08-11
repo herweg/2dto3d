@@ -4,13 +4,17 @@ extends Node2D
 ## pedido por el usuario (10-ago): mecánica de desbloqueo + árbol visual
 ## funcionando sobre TalentTreeDef (ver docs/fase3-talentos-motor.md para
 ## el estado del contenido — el mecanismo de acá no depende de cuántos
-## nodos haya ni de qué digan). El costo (_points_available) sigue siendo
-## placeholder — economía de progresión sin calibrar todavía
-## (fase3-alcance-v1.md sección 2).
+## nodos haya ni de qué digan).
 ##
-## Sin persistencia todavía: el estado de desbloqueo vive en memoria, muere
-## con el proceso — guardado sigue pausado (plan-fases.md, fase3-alcance-v1.md
-## sección 4 punto 3). Sin conexión a combate todavía: cada nodo declara
+## Persistente desde el sistema de guardado (10-ago, SaveManager autoload):
+## el oro que gasta cada desbloqueo y qué nodos quedaron desbloqueados
+## viven en SaveManager.state, no acá — esta pantalla lee/escribe ese
+## estado, no es dueña de él (así lo ven MainMenu y una futura calibración
+## de combate sin duplicar nada). El costo de cada nodo (1-2) sigue siendo
+## placeholder — economía de progresión sin calibrar todavía
+## (fase3-alcance-v1.md sección 2) — pero la moneda que lo paga ya es real.
+##
+## Sin conexión a combate todavía: cada nodo declara
 ## effect_scope/stat_id/modifier_value (TalentTreeDef) pero nada los lee —
 ## TowerStore/TowerSystem no se tocan en esta tarjeta.
 ##
@@ -36,13 +40,17 @@ const LINE_LOCKED := Color(0.35, 0.35, 0.38, 1.0)
 const LINE_UNLOCKED := Color(0.25, 0.70, 0.35, 1.0)
 
 var _tree: TalentTreeDef
-var _unlocked: Dictionary = {}  # id (String) -> true
-var _points_available := 10  # placeholder — sin economía calibrada todavía
+var _unlocked: Dictionary = {}  # id (String) -> true, espejo local de SaveManager para no leerlo en cada draw
 var _node_buttons: Dictionary = {}  # id (String) -> Button
 var _points_label: Label
 
 func _ready() -> void:
 	_tree = TREE_DEF
+	# Cargar desbloqueos previos del save — un nodo ya pago en una sesión
+	# anterior tiene que aparecer desbloqueado de entrada, no perderse.
+	for id in SaveManager.state["unlocked_talent_ids"]:
+		_unlocked[id] = true
+
 	var layer := CanvasLayer.new()
 
 	var title := Label.new()
@@ -84,12 +92,16 @@ func _ready() -> void:
 	_refresh_node_states()
 
 	# Primera pasada: settings (mismo criterio que level_controller.gd —
-	# "points" tiene que aplicarse antes de cualquier "unlock" de la misma
-	# invocación, sin depender del orden en la línea de comandos).
+	# "gold" tiene que aplicarse antes de cualquier "unlock" de la misma
+	# invocación, sin depender del orden en la línea de comandos). Escribe
+	# directo en SaveManager (ya está en save_path de test si esta corrida
+	# tiene argumentos — ver save_manager.gd) para poder probar "no alcanza
+	# el oro" o "sí alcanza" sin depender del oro real acumulado.
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.split("=")
-		if parts.size() == 2 and parts[0] == "points":
-			_points_available = parts[1].to_int()
+		if parts.size() == 2 and parts[0] == "gold":
+			SaveManager.state["gold"] = parts[1].to_int()
+			SaveManager.save_game()
 	_refresh_node_states()
 
 	# Segunda pasada: acciones, en orden — soporta varios "unlock=" en la
@@ -105,7 +117,7 @@ func _ready() -> void:
 				var img := get_viewport().get_texture().get_image()
 				img.save_png("res://benchmark_results/talents_screenshot.png")
 				print("[talents] screenshot guardado")
-			print("[talents] listo — desbloqueados: %d/%d, puntos: %d" % [_unlocked.size(), _tree.ids.size(), _points_available])
+			print("[talents] listo — desbloqueados: %d/%d, oro: %d" % [_unlocked.size(), _tree.ids.size(), SaveManager.state["gold"]])
 			get_tree().quit()
 		if arg == "auto-back":
 			# Equivalente headless/CLI de "Volver" — mismo criterio de
@@ -125,9 +137,13 @@ func _effect_summary(i: int) -> String:
 
 ## Único punto de desbloqueo — botón real y flag `unlock=<id>` (headless)
 ## pasan por acá, mismo criterio que _start_round()/_force_finish_round()
-## de level_controller.gd. Chequea prerequisito y costo; no hace nada si
-## ya está desbloqueado, si el id no existe, si el padre no está
-## desbloqueado, o si no alcanzan los puntos.
+## de level_controller.gd. Chequea prerequisito y costo (contra el oro real
+## de SaveManager, no un contador local); no hace nada si ya está
+## desbloqueado, si el id no existe, si el padre no está desbloqueado, o si
+## no alcanza el oro. SaveManager.spend_gold() persiste el gasto,
+## SaveManager.unlock_talent() persiste el nodo — los dos antes de tocar el
+## espejo local _unlocked, para que un desbloqueo real y uno rechazado no
+## puedan divergir entre memoria y disco.
 func _try_unlock(id: String) -> bool:
 	if _unlocked.has(id):
 		return false
@@ -138,10 +154,9 @@ func _try_unlock(id: String) -> bool:
 	var parent := _tree.parent_ids[i]
 	if parent != "" and not _unlocked.has(parent):
 		return false
-	var cost := _tree.costs[i]
-	if cost > _points_available:
+	if not SaveManager.spend_gold(_tree.costs[i]):
 		return false
-	_points_available -= cost
+	SaveManager.unlock_talent(id)
 	_unlocked[id] = true
 	_refresh_node_states()
 	return true
@@ -157,7 +172,7 @@ func _on_back_pressed() -> void:
 ## Redibuja las líneas de prerequisito (_draw()) para que reflejen el mismo
 ## estado.
 func _refresh_node_states() -> void:
-	_points_label.text = "Puntos: %d" % _points_available
+	_points_label.text = "Oro: %d" % SaveManager.state["gold"]
 	for i in _tree.ids.size():
 		var id := _tree.ids[i]
 		var btn: Button = _node_buttons[id]
@@ -167,7 +182,7 @@ func _refresh_node_states() -> void:
 		else:
 			var parent := _tree.parent_ids[i]
 			var prereq_ok := parent == "" or _unlocked.has(parent)
-			var can_afford := _tree.costs[i] <= _points_available
+			var can_afford: bool = _tree.costs[i] <= SaveManager.state["gold"]
 			if prereq_ok and can_afford:
 				btn.self_modulate = COLOR_AVAILABLE
 				btn.disabled = false

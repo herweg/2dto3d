@@ -256,10 +256,13 @@ todavía — lo dejo anotado acá solo para que quede registrado como
 "revisado, correctamente fuera de alcance hoy", no como un olvido.
 
 **Actualización, 10-ago:** el árbol de mejoras (sección 3 de
-`fase3-alcance-v1.md`) ya tiene un frame funcionando — ver sección 5. La
-condición que pausaba esto ("cuando el árbol tenga aunque sea una forma
-preliminar") ya está más cerca de cumplirse; no reabro el guardado yo acá,
-señal para Dirección/PM.
+`fase3-alcance-v1.md`) ya tiene un frame funcionando — ver sección 5.
+
+**Actualización, 10-ago (más tarde):** el usuario pidió el sistema de
+guardado directamente, sin esperar una reapertura formal en
+`plan-fases.md` — implementado y verificado, ver sección 6
+(`fase3-guardado-motor.md`). Ya no queda nada pausado de las 3 piezas de
+motor originales de `fase3-alcance-v1.md` sección 6.
 
 ---
 
@@ -373,3 +376,21 @@ carga el menú y no hay nada que la cierre. Los comandos de las secciones 1
 y 2 de este documento, escritos antes de este cambio, ya no alcanzan
 copiados tal cual — quedan correctos en contenido, no en la invocación
 exacta.
+
+---
+
+## 6. Sistema de guardado — implementado y verificado
+
+Pedido directo del usuario (10-ago), tercera y última pieza de motor de
+`fase3-alcance-v1.md` sección 6: `SaveManager` (autoload, JSON en
+`user://`) guarda oro (única moneda, +10 placeholder por ronda), bajas
+totales acumuladas, nivel de jugador (persistido, sin mecánica que lo
+mueva todavía) y qué nodos del árbol de talentos están desbloqueados —
+más botón "Tabula Rasa" en `MainMenu.tscn`, sin explicación en la UI,
+pedido explícito. El oro del árbol de talentos dejó de ser un contador en
+memoria (`fase3-talentos-motor.md`) y pasó a ser el oro real guardado —
+una partida nueva empieza en 0 y no puede desbloquear nada hasta jugar una
+ronda, verificado como comportamiento correcto, no bug. Detalle completo,
+tabla de verificación (persistencia entre procesos, Tabula Rasa borrando
+de verdad, separación de save real vs. de prueba) en
+`fase3-guardado-motor.md`.

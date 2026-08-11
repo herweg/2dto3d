@@ -14,6 +14,10 @@ config/name="TowerDefense"
 run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
+[autoload]
+
+SaveManager="*res://sim/save_manager.gd"
+
 [display]
 
 window/size/viewport_width=1280
