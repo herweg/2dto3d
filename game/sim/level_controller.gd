@@ -204,7 +204,15 @@ func _setup_round_ui() -> void:
 	_test_button = Button.new()
 	_test_button.text = "TEST: Finalizar ronda"
 	_test_button.position = Vector2(20, 70)
+	# Mismo ancho que los otros dos (160) para no invadir el carril — el
+	# texto, más largo que "Comenzar"/"Salir al menú", desbordaba el botón
+	# a ese ancho con la fuente default (visto en captura real, Mesa de
+	# Developers, revisión del commit f0cfa56 — el propio commit lo daba
+	# por verificado sin que la captura real lo mostrara así). Achicar la
+	# fuente en vez de agrandar el botón: agrandarlo tapaba el punto de
+	# spawn.
 	_test_button.size = Vector2(160, 40)
+	_test_button.add_theme_font_size_override("font_size", 12)
 	_test_button.self_modulate = Color(1.0, 0.35, 0.1)
 	_test_button.pressed.connect(_force_finish_round)
 	layer.add_child(_test_button)
@@ -351,6 +359,13 @@ func _parse_cli_args() -> void:
 			# la invocación las va a rechazar (PLACEMENT ya terminó), mismo
 			# criterio que ya vale para el jugador real.
 			_start_round()
+		if arg == "force-finish-round":
+			# Equivalente headless/CLI del botón "TEST: Finalizar ronda"
+			# (commit f0cfa56) — agregado para poder verificar esa lógica
+			# con una corrida real, no solo por revisión de código.
+			_force_finish_round()
+		if arg == "auto-exit-to-menu":
+			_exit_to_menu.call_deferred()
 		var parts := arg.split("=")
 		if parts.size() == 2:
 			match parts[0]:

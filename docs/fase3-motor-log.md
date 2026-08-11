@@ -254,3 +254,103 @@ para después... se retoma cuando el árbol [de mejoras] tenga aunque sea una
 forma preliminar"). No hay tarjeta, no hay pieza de motor que evaluar
 todavía — lo dejo anotado acá solo para que quede registrado como
 "revisado, correctamente fuera de alcance hoy", no como un olvido.
+
+---
+
+## 4. Revisión del commit `f0cfa56` (pantalla de inicio + botones de test)
+
+Tarjeta que debía llegar a Mesa de Developers llegó al Auditor por error, y
+la ejecutó (`MainMenu.tscn`/`main_menu_controller.gd`, dos botones nuevos
+en `Level1.tscn` — "TEST: Finalizar ronda" y "Salir al menú"). Pedido del
+usuario: revisar el resultado, con voz final acá — corrijo lo que haga
+falta.
+
+**Veredicto: el diseño y la lógica están bien. Encontré y corregí un bug
+visual real, y corregí un diagnóstico de la verificación original que
+estaba mal — ninguno de los dos invalida el trabajo, los dos eran
+verificables y no se habían verificado del todo.**
+
+### 4.1 Lo que estaba bien
+
+- `main_menu_controller.gd`: título + Start (carga `Level1.tscn`) + Exit
+  (`get_tree().quit()`), mismo criterio "funcional, sin estilo" que el
+  resto de la UI del proyecto. Layout centrado en el viewport (1280×720).
+- `_force_finish_round()`: transición de estado correcta (PLACEMENT→COMBAT
+  si hacía falta, guard contra doble-click/ROUND_COMPLETE), reusa
+  `_complete_round()` sin duplicar lógica, el drenado de activos
+  (`while active_count > 0: release(0)`) usa el mismo primitivo de
+  swap-remove que ya prueba el resto del proyecto — no encontré nada mal
+  acá, y ahora está corrido de verdad (sección 4.3), no solo leído.
+- `_exit_to_menu()`: una línea, sin guardado (correcto, sigue pausado),
+  transición limpia — confirmado con una corrida real.
+
+### 4.2 Bug real encontrado: el botón de test desbordaba su propio ancho
+
+El commit dice "Level1 renderiza los 3 botones correctamente apilados...
+sin superponerse". Con una captura real (windowed, ver
+`level1_screenshot_3buttons_fixed.png` de esta revisión) el texto "TEST: Finalizar
+ronda" excedía el borde derecho del botón — 21 caracteres a fuente default
+no entran en 160px (el mismo ancho que "Comenzar"/"Salir al menú", que sí
+entran, son más cortos). Corregido con `add_theme_font_size_override
+("font_size", 12)` en vez de agrandar el botón — agrandarlo a 220px (mi
+primer intento) tapaba el punto de spawn del carril, achicar la fuente no.
+Reverificado con captura nueva: texto adentro del botón, sin invadir nada.
+
+### 4.3 Diagnóstico corregido: el "cuelgue" de headless no era del entorno
+
+El commit dice, sobre `quit-after` en headless: "se cuelga de forma
+reproducible en este entorno de ejecución — confirmado que no es un bug
+del cambio, el mismo cuelgue aparece con stress-test (código viejo, ya
+verificado antes)". **Esto no es correcto, y lo verifiqué de forma
+directa:**
+
+| Corrida | Resultado |
+|---|---|
+| `stress-test ...` headless, **sin** ruta de escena explícita | Cuelga — corre hasta el límite del `timeout` externo, sin ningún log de `[level1]` |
+| La misma corrida, con `res://scenes/Level1.tscn` explícito | Sale limpia en ~3s, log normal |
+| `place-all-towers real-stats start-round quit-after=8`, sin ruta explícita | Cuelga (mismo patrón) |
+| La misma corrida, con `res://scenes/Level1.tscn` explícito | Sale limpia en ~8s, números idénticos al baseline de siempre |
+
+**Causa real:** este mismo commit cambió `project.godot`
+(`run/main_scene` de `Level1.tscn` a `MainMenu.tscn` — pedido explícito del
+usuario, correcto en sí mismo, no lo revierto). Cualquier invocación
+headless que no especifique una escena carga `MainMenu.tscn` por default
+— y `main_menu_controller.gd` no leía ningún argumento de línea de
+comandos ni llamaba `get_tree().quit()` en ningún caso salvo el click de
+"Exit" (que en headless nunca llega). El proceso no se cuelga por el
+entorno ni por nada viejo del `stress-test` — corre para siempre porque la
+escena que cargó no tiene ninguna condición de salida. La comparación con
+"stress-test, código viejo, ya verificado" no aplica: ese código nunca
+dejó de funcionar, solo dejó de ser la escena que carga por default.
+
+**Consecuencia real, no cosmética:** por este diagnóstico, no se corrió
+ninguna verificación headless de los botones nuevos — el commit lo dice
+explícito ("no se probó el click real... verificada por revisión de
+código, no por click real"). Los agregué y corrí:
+
+- `force-finish-round` (equivalente CLI del botón de test) y
+  `auto-exit-to-menu` en `level_controller.gd`.
+- `auto-start` y `screenshot-quit` en `main_menu_controller.gd`.
+
+Con estos, corrí — todos con ruta de escena explícita:
+
+| Caso | Resultado |
+|---|---|
+| `force-finish-round` desde `PLACEMENT`, sin `start-round` | Ronda se completa al toque, `estado:ROUND_COMPLETE`, sin activos, sin errores |
+| `MainMenu.tscn -- auto-start quit-after=3` | Carga `Level1.tscn` correctamente (con el trigger deferido a un frame después de `_ready()` — sin deferir, `change_scene_to_file()` tira "Parent node is busy", artefacto de mi propio gancho de prueba llamándolo síncrono desde `_ready()`, no algo que un click real dispare) |
+| `Level1.tscn -- auto-exit-to-menu screenshot-quit` | Vuelve a `MainMenu.tscn`, la pantalla renderiza título+Start+Exit sin errores |
+| `MainMenu.tscn -- auto-start place-all-towers real-stats start-round quit-after=6` | Flujo completo jugador real: menú→Start→Level1→torres→ronda, números normales |
+
+Todo pasa. La lógica de los botones nuevos era correcta desde el commit
+original — lo que faltaba era la corrida real que la probara, no un
+arreglo de código (salvo el bug de la sección 4.2).
+
+### 4.4 Nota operativa, de acá en más
+
+`run/main_scene` es `MainMenu.tscn`. Cualquier invocación headless/CLI de
+`Level1.tscn` (regresión, benchmarks, tests de nivel) necesita la ruta
+explícita: `--path game res://scenes/Level1.tscn -- <args>` — sin eso,
+carga el menú y no hay nada que la cierre. Los comandos de las secciones 1
+y 2 de este documento, escritos antes de este cambio, ya no alcanzan
+copiados tal cual — quedan correctos en contenido, no en la invocación
+exacta.
