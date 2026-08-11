@@ -122,6 +122,22 @@ var _shot_times: Array = [6.0, 14.0, 30.0]
 ## resolución mide la captura, no el juego.
 var _no_screenshot := false
 
+## VFX reales (fase3-vfx-exploracion-v1.md) — 4 flags independientes
+## (`vfx-burn=1`/`vfx-explosion=1`/`vfx-spark=1`/`vfx-death=1`) más
+## `vfx-real=1` que prende los 4 juntos (el que usan las Fases 2/3 de la
+## tarjeta). Placeholder de geometría/color simple, no arte final — mismo
+## criterio que ya usó fase2-vfx-benchmark.md. Funciona también en
+## stress-test (a propósito, a diferencia de _setup_round_ui()): las
+## Fases 2/3 de la tarjeta corren adentro de stress-test.
+var _vfx_burn := false
+var _vfx_explosion := false
+var _vfx_spark := false
+var _vfx_death := false
+var _burn_render: EntityRenderSync = null
+var _explosion_pool: BurstVfxPool = null
+var _spark_pool: BurstVfxPool = null
+var _death_pool: BurstVfxPool = null
+
 ## Simulación de estrés — 30 torres disparando rápido (DEV_FIRE_RATE_OVERRIDE)
 ## contra un objetivo sostenido de 300 enemigos, midiendo frame time con la
 ## misma herramienta del spike (BenchmarkLogger, game/sim/benchmark_logger.gd).
@@ -223,8 +239,62 @@ func _ready() -> void:
 
 	if not _stress_test:
 		_setup_round_ui()
+	if _vfx_burn or _vfx_explosion or _vfx_spark or _vfx_death:
+		_setup_vfx()
 
 	queue_redraw()
+
+## VFX reales (fase3-vfx-exploracion-v1.md Fase 0) — a diferencia de
+## _setup_round_ui(), esto SÍ se arma en stress-test: las Fases 2/3 de la
+## tarjeta corren adentro de ese modo. Propaga los flags a los sistemas
+## dueños del evento (ProjectileSystem para chispa/explosión,
+## LaneEnemySystem para muerte) y arma los pools/overlay que faltan.
+func _setup_vfx() -> void:
+	_proj_system.vfx_spark_enabled = _vfx_spark
+	_proj_system.vfx_explosion_enabled = _vfx_explosion
+	_lane_system.vfx_death_enabled = _vfx_death
+	if _vfx_burn:
+		# Overlay de quemadura: mismo EntityRenderSync que ya usan enemigos/
+		# proyectiles, sincronizado cada frame solo con los índices donde
+		# dot_time_left>0 — no es un burst, es un estado continuo (ver
+		# _sync_burn_overlay()).
+		_burn_render = EntityRenderSync.new(MAX_ENEMIES, 22.0, Color(0.95, 0.45, 0.05, 0.75))
+		add_child(_burn_render.get_node2d())
+	if _vfx_explosion:
+		_explosion_pool = BurstVfxPool.new(self, 24, Color(1.0, 0.5, 0.1), 16, 0.45)
+	if _vfx_spark:
+		_spark_pool = BurstVfxPool.new(self, 64, Color(1.0, 0.95, 0.4), 6, 0.2)
+	if _vfx_death:
+		_death_pool = BurstVfxPool.new(self, 32, Color(0.55, 0.15, 0.65), 14, 0.5)
+
+## Drena los arrays de eventos de la sim (sin señales — ver la nota en
+## projectile_system.gd/lane_enemy_system.gd) y dispara los pools/overlay
+## correspondientes. Llamado una vez por frame, después de que
+## ProjectileSystem/LaneEnemySystem ya corrieron su tick — los arrays
+## reflejan exactamente lo que pasó en este frame, no acumulan entre
+## frames (cada tick() los vacía al empezar).
+func _drain_vfx_events() -> void:
+	if _vfx_spark:
+		for pos in _proj_system.spark_events:
+			_spark_pool.trigger(pos)
+	if _vfx_explosion:
+		for pos in _proj_system.explosion_events:
+			_explosion_pool.trigger(pos)
+	if _vfx_death:
+		for pos in _lane_system.death_events:
+			_death_pool.trigger(pos)
+	if _vfx_burn:
+		_sync_burn_overlay()
+
+## Quemadura es un estado continuo (dot_time_left>0), no un evento —
+## recalcula qué enemigos están "prendidos" cada frame y sincroniza el
+## overlay, mismo patrón que _enemy_render.sync() pero filtrado.
+func _sync_burn_overlay() -> void:
+	var scratch := PackedVector2Array()
+	for i in _enemy_store.active_count:
+		if _enemy_store.dot_time_left[i] > 0.0:
+			scratch.append(_enemy_store.positions[i])
+	_burn_render.sync(scratch, scratch.size())
 
 ## Botón "Comenzar" (fase3-tarjeta-estado-ronda-v1.md sección 4) — primer
 ## Control/CanvasLayer del proyecto, a propósito sin estilo (funcional
@@ -482,6 +552,26 @@ func _parse_cli_args() -> void:
 					# _start_round()/_force_finish_round() lo leen antes de
 					# que la segunda pasada pueda procesar nada.
 					_max_lives = parts[1].to_int()
+				"vfx-burn":
+					if parts[1] == "1":
+						_vfx_burn = true
+				"vfx-explosion":
+					if parts[1] == "1":
+						_vfx_explosion = true
+				"vfx-spark":
+					if parts[1] == "1":
+						_vfx_spark = true
+				"vfx-death":
+					if parts[1] == "1":
+						_vfx_death = true
+				"vfx-real":
+					# Los 4 juntos (fase3-vfx-exploracion-v1.md Fase 0) — el
+					# que usan las Fases 2/3 de la tarjeta.
+					if parts[1] == "1":
+						_vfx_burn = true
+						_vfx_explosion = true
+						_vfx_spark = true
+						_vfx_death = true
 
 	if _stress_test:
 		_setup_stress_test()
@@ -723,6 +813,9 @@ func _process(delta: float) -> void:
 		_proj_system.tick(delta)
 	_tower_system.tick(delta)
 	_dot_system.tick(delta)
+
+	if _vfx_spark or _vfx_explosion or _vfx_death or _vfx_burn:
+		_drain_vfx_events()
 
 	_enemy_render.sync(_enemy_store.positions, _enemy_store.active_count)
 	_proj_render.sync(_proj_store.positions, _proj_store.active_count, _proj_store.type_id)

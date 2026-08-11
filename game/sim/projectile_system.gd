@@ -29,6 +29,17 @@ var hash: SpatialHash
 
 var hits_last_tick: int = 0
 
+## VFX (fase3-vfx-exploracion-v1.md, Fase 0) — arrays de eventos, no
+## señales (ver nota de arriba, "sin señales"): el llamador (level_
+## controller.gd) drena esto después de tick()/tick_native() y alimenta
+## el pool de partículas. Vacío y sin costo salvo el chequeo del booleano
+## cuando el flag correspondiente está apagado — la corrida "sin VFX" de
+## las Fases 2/3 no debe pagar nada por esta instrumentación.
+var vfx_spark_enabled := false
+var vfx_explosion_enabled := false
+var spark_events: PackedVector2Array = PackedVector2Array()
+var explosion_events: PackedVector2Array = PackedVector2Array()
+
 ## Diagnóstico del spike: aísla el costo de movimiento+render del costo de
 ## colisión (consulta al hash espacial), para saber si el hot path a mover
 ## a GDExtension (Paso 4) es realmente la colisión o si el cuello de botella
@@ -52,6 +63,8 @@ func _init(p_proj: ProjectileStore, p_enemy: EnemyStore, p_hash: SpatialHash) ->
 
 func tick(delta: float) -> void:
 	hits_last_tick = 0
+	spark_events.clear()
+	explosion_events.clear()
 	var i := 0
 	while i < proj_store.active_count:
 		var dead: bool
@@ -125,11 +138,18 @@ func _check_collision(i: int) -> bool:
 ## duplicar esta lógica.
 func _apply_hit(i: int, e_idx: int) -> void:
 	enemy_store.health[e_idx] -= proj_store.damage[i]
+	if vfx_spark_enabled:
+		spark_events.append(proj_store.positions[i])
 	if proj_store.splash_radius[i] <= 0.0:
 		return
 	_apply_area_damage(proj_store.positions[i], proj_store.damage[i], proj_store.splash_radius[i], e_idx)
 
+## Un solo evento de explosión por acá, no por enemigo alcanzado — cubre
+## los dos llamadores (impacto directo con splash_radius>0 arriba, y
+## _tick_missile() al llegar) con un único hook.
 func _apply_area_damage(pos: Vector2, dmg: float, radius: float, exclude: int = -1) -> void:
+	if vfx_explosion_enabled:
+		explosion_events.append(pos)
 	var radius_sq := radius * radius
 	for other in hash.query_nearby(pos):
 		if other == exclude:
@@ -199,6 +219,8 @@ func _tick_missile(i: int, delta: float) -> bool:
 ## batch. Ver docs/fase2-plan-proyectiles.md, "Qué no entró a SimHotPath".
 func tick_native(delta: float) -> void:
 	hits_last_tick = 0
+	spark_events.clear()
+	explosion_events.clear()
 
 	# _dead_marks se relee más abajo por índice después de que este loop ya
 	# hizo swap-remove sobre el store. El clear de acá solo cubre basura
@@ -258,6 +280,8 @@ func tick_native(delta: float) -> void:
 		# este mismo tick, así que p_idx acá siempre es un tipo "viajero"
 		# todavía vivo — no hace falta filtrarlos de nuevo.
 		enemy_store.health[e_idx] -= proj_store.damage[p_idx]
+		if vfx_spark_enabled:
+			spark_events.append(proj_store.positions[p_idx])
 		hits_last_tick += 1
 		proj_store.last_hit_enemy[p_idx] = e_idx
 		proj_store.hits_remaining[p_idx] -= 1
@@ -265,11 +289,20 @@ func tick_native(delta: float) -> void:
 			_dead_marks[p_idx] = 1
 		j += 2
 
+	# Un evento de explosión por proyectil (p_idx), no por enemigo
+	# salpicado — mismo criterio que _apply_area_damage() del lado
+	# GDScript. `splash` viene agrupado por p_idx desde SimHotPath (cada
+	# proyectil aporta un bloque contiguo de pares), así que alcanza con
+	# comparar contra el p_idx anterior en vez de un set.
+	var last_explosion_p_idx := -1
 	j = 0
 	while j < splash.size():
 		var p_idx := splash[j]
 		var e_idx := splash[j + 1]
 		enemy_store.health[e_idx] -= proj_store.damage[p_idx]
+		if vfx_explosion_enabled and p_idx != last_explosion_p_idx:
+			explosion_events.append(proj_store.positions[p_idx])
+			last_explosion_p_idx = p_idx
 		j += 2
 
 	var k := 0

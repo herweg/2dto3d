@@ -20,6 +20,13 @@ var obstacle_radius: float
 var leaked_count: int = 0
 var killed_count: int = 0  # health<=0 antes de llegar a la meta — evidencia de que algo le hizo daño
 
+## VFX (fase3-vfx-exploracion-v1.md, Fase 0) — mismo criterio de evento sin
+## señales que projectile_system.gd. Posición leída ANTES de release(): una
+## vez liberado el slot, positions[i] puede pertenecer a otro enemigo (swap-
+## remove) — ver entity_store.gd::release().
+var vfx_death_enabled := false
+var death_events: PackedVector2Array = PackedVector2Array()
+
 func _init(p_store: EnemyStore, p_waypoints: PackedVector2Array, p_obstacles: PackedVector2Array, p_obstacle_radius: float) -> void:
 	store = p_store
 	waypoints = p_waypoints
@@ -27,9 +34,12 @@ func _init(p_store: EnemyStore, p_waypoints: PackedVector2Array, p_obstacles: Pa
 	obstacle_radius = p_obstacle_radius
 
 func tick(delta: float) -> void:
+	death_events.clear()
 	var i := 0
 	while i < store.active_count:
 		if store.health[i] <= 0.0:
+			if vfx_death_enabled:
+				death_events.append(store.positions[i])
 			store.release(i)
 			killed_count += 1
 			continue
