@@ -441,3 +441,64 @@ verificadas sin cambios en los números (torres/proyectiles/enemigos
 idénticos al baseline) — el cambio es de dirección, no de cantidad.
 Verificado a ojo con una captura nueva: proyectiles de los tipos sin
 targeting viajando hacia la izquierda de forma consistente.
+
+---
+
+## 9. Barrido de resolución con texturas reales — el motor no es GPU-bound acá
+
+Pedido del usuario (10-ago): "fijate dentro del stress test que resolucion
+soporta el motor, con texturas reales (no importa si la textura no
+matchea, hace lo que puedas con las texturas que hay)".
+
+**Método:** población realista-a-pesada constante (`stress-test
+stress-towers=100 stress-enemies=2400 real-stats stress-fire-rate=0.03` —
+el mismo punto de control de la sección 16 de `fase2-benchmark-conjunto.md`,
+piso ya conocido ~58.5fps sin texturas) + `stress-textures=1` (torres,
+enemigos y fondo con las texturas reales que ya usaba
+`_enable_stress_textures()` desde Fase 2 — `torreta_recta_v2.png`,
+`characters.png`, `torreta_recta_v3_small.png` tileada; ninguna es el arte
+"correcto" para lo que pinta, tal como el pedido permitía explícitamente),
+`--resolution <W>x<H>` (flag nativo del motor) barrida de 720p a 8K,
+ventana real (Vulkan), `quit-after=20`.
+
+**Primera corrida — con el mecanismo de captura de pantalla activo — daba
+un patrón sospechoso: piso cayendo de 48.6fps (720p) a 38.6fps (8K) con el
+promedio prácticamente plano (~65-68fps en las cuatro).** Ya conocía ese
+patrón — es la firma de "Causa 1" (`fase2-benchmark-conjunto.md`): una
+lectura síncrona de GPU puntual, no costo sostenido de juego. Acá tiene
+sentido que empeore con la resolución (leer un framebuffer más grande
+cuesta más), cosa que Causa 1 nunca necesitó explicar porque ahí la
+resolución era siempre la misma. `level_controller.gd` no tenía el flag
+`no-screenshot=1` que sí tiene `stress_main.gd` para esto — lo agregué
+(mismo nombre, mismo criterio) y repetí el barrido.
+
+**Con la captura descartada, el piso queda estable en las cinco
+resoluciones:**
+
+| Resolución | Píxeles | Piso | Promedio | Muestras bajo 60 |
+|---|---|---|---|---|
+| 1280×720 | 0.9M | 60.7fps | 69.2fps | 0/90 |
+| 1920×1080 | 2.1M | 57.3fps | 67.6fps | 1/88 |
+| 2560×1440 | 3.7M | 58.8fps | 67.5fps | 1/88 |
+| 3840×2160 (4K) | 8.3M | 56.9fps | 67.4fps | 1/88 |
+| 7680×4320 (8K) | 33.2M | 54.8fps | 68.7fps | 1/90 |
+
+**Conclusión: para esta arquitectura de render (`MultiMeshInstance2D` por
+`type_id`, quads chicos de 18-26px), el motor no es GPU-bound por
+resolución — es CPU-bound por simulación, y eso no cambia con los píxeles
+en pantalla.** De 720p a 8K (×36 en cantidad de píxeles) el piso se mueve
+~6fps sin tendencia monótona clara (1440p midió más alto que 1080p) —
+del mismo orden que el jitter de medición que ya se documentó en otras
+secciones de este proyecto, no una degradación real por fill-rate. Para
+comparar la magnitud: el cambio de backend GDScript→nativo por sí solo
+movió el piso 40+fps a población moderada (`fase2-benchmark-conjunto.md`
+sección 13) — la resolución, en este barrido, no se le acerca ni de
+lejos.
+
+**Respuesta directa a la pregunta:** el motor sostiene el pico realista
+completo (100 torres, ~2.400 enemigos, ~850-900 proyectiles, texturas
+reales en los 3 grupos) sin caída medible de piso hasta 8K — no encontré
+un techo de resolución dentro de lo que un monitor real hoy ofrece. No
+sé si un fill-rate real aparecería con quads más grandes o materiales más
+caros (blend/transparencia, shaders); esto mide la arquitectura actual, no
+descarta que resolución importe con otro tipo de contenido.
