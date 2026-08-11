@@ -22,9 +22,16 @@ func _ready() -> void:
 	start_button.pressed.connect(_on_start_pressed)
 	layer.add_child(start_button)
 
+	var talents_button := Button.new()
+	talents_button.text = "Talentos"
+	talents_button.position = Vector2(580, 380)
+	talents_button.size = Vector2(120, 44)
+	talents_button.pressed.connect(_on_talents_pressed)
+	layer.add_child(talents_button)
+
 	var exit_button := Button.new()
 	exit_button.text = "Exit"
-	exit_button.position = Vector2(580, 380)
+	exit_button.position = Vector2(580, 440)
 	exit_button.size = Vector2(120, 44)
 	exit_button.pressed.connect(_on_exit_pressed)
 	layer.add_child(exit_button)
@@ -43,21 +50,34 @@ func _ready() -> void:
 				img.save_png("res://benchmark_results/mainmenu_screenshot.png")
 				print("[mainmenu] screenshot guardado")
 			get_tree().quit()
-		if arg == "auto-start":
-			# Equivalente headless/CLI del click en "Start" — para probar la
-			# transición de escena real en vez de solo revisarla por código.
-			# Deferido a próximo frame: un click real dispara la señal
-			# después de que _ready() ya terminó de agregar nodos, no
+		if arg == "auto-start" or arg == "auto-talents":
+			# Equivalente headless/CLI del click en "Start"/"Talentos" — para
+			# probar la transición de escena real en vez de solo revisarla
+			# por código. Deferido a próximo frame: un click real dispara la
+			# señal después de que _ready() ya terminó de agregar nodos, no
 			# durante — llamar change_scene_to_file() en el medio de eso
-			# tira "Parent node is busy adding/removing children".
+			# tira "Parent node is busy adding/removing children". `return`
+			# después: change_scene_to_file() ya deja este nodo fuera del
+			# árbol, seguir iterando args acá (ej. screenshot-quit de esta
+			# misma pantalla) pega contra un get_tree() nulo — no es un caso
+			# real (un click no dispara dos señales a la vez), pero si se
+			# combinan estos flags de prueba en la misma invocación sí.
 			await get_tree().process_frame
-			print("[mainmenu] auto-start: cargando Level1.tscn")
-			_on_start_pressed()
+			if arg == "auto-start":
+				print("[mainmenu] auto-start: cargando Level1.tscn")
+				_on_start_pressed()
+			else:
+				print("[mainmenu] auto-talents: cargando TalentTree.tscn")
+				_on_talents_pressed()
+			return
 
 ## Siempre el primer nivel — no hay selector de pantallas todavía
 ## (fase3-alcance-v1.md sección 2.3, sin tarjeta de motor asignada aún).
 func _on_start_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Level1.tscn")
+
+func _on_talents_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/TalentTree.tscn")
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
