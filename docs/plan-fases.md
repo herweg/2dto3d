@@ -680,6 +680,27 @@ secuencia:
 >    en tarea de motor todavía). Regresión de `level_01.tres` confirmada
 >    limpia después de revertir el puntero temporal usado para verificar
 >    cada uno.
+>
+> **Corrección de este mismo registro (Dirección, 10-ago): el punto 2 ya
+> no está pausado.** La PM lo pidió directo (`fase3-guardado-motor.md`) —
+> `SaveManager` construido y verificado, oro/bajas/talentos ya persisten.
+> No lo cierro yo acá retroactivamente porque no lo revisé en su momento;
+> lo dejo anotado para que este registro no quede desactualizado, y sigue
+> sin bloquear nada de lo de abajo.
+
+**Dirección, 10-ago — pregunta de la PM: ¿concatenar niveles o popularlos
+primero?** Verifiqué el estado real antes de contestar: popular ya está
+hecho (los 5 `LevelDef` existen y están verificados, punto 3 de arriba).
+Lo que falta, y lo único que hace falta para que el juego sea jugable de
+punta a punta, es **derrota + encadenado juntos** — sin condición de
+derrota, "ganable" no se puede ni probar (toda ronda gana sola con solo
+esperar); sin encadenado, los otros 4 niveles ya construidos siguen sin
+poder jugarse. Tarjeta completa en `docs/fase3-tarjeta-ganable-v1.md` —
+vidas de jugador (placeholder), `RoundState.ROUND_LOST` nuevo, y
+`stage_index` en `SaveManager` (deliberadamente distinto de
+`player_level`, mismo cuidado de vocabulario que ya pidió la sección 4
+punto 1 del alcance) para que `level_controller.gd` cargue el nivel que
+corresponda en vez del `preload()` fijo actual.
 
 ---
 
