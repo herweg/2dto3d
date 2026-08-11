@@ -639,9 +639,12 @@ func _top_up_zones() -> void:
 ## proyectiles con velocidad cero, inmóviles. Habría roto en silencio todo
 ## número de proj_count/fps ya medido con mode=joint desde hace varias
 ## secciones — se aplica acá también, no solo en la pantalla jugable.
+## Izquierda fijo (10-ago, pedido del usuario) — antes usaba
+## nearest_point_on_path(), igual que level_controller.gd tenía; mismo
+## motivo del cambio, para que este arnés siga midiendo lo mismo que la
+## pantalla real dispara.
 func _fixed_dir_for(pos: Vector2) -> Vector2:
-	var dir := (_level.nearest_point_on_path(pos) - pos).normalized()
-	return dir if not dir.is_zero_approx() else Vector2.LEFT
+	return Vector2.LEFT
 
 func _ensure_towers(target: int, cycle_types: bool = false) -> void:
 	var spawned := 0

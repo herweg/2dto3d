@@ -394,3 +394,50 @@ ronda, verificado como comportamiento correcto, no bug. Detalle completo,
 tabla de verificación (persistencia entre procesos, Tabula Rasa borrando
 de verdad, separación de save real vs. de prueba) en
 `fase3-guardado-motor.md`.
+
+---
+
+## 7. Hacer el juego ganable — derrota + encadenado
+
+Tarjeta de Dirección (`docs/fase3-tarjeta-ganable-v1.md`, commit
+`e9740ed`), pedido del usuario: revisarla y proceder. `RoundState.ROUND_LOST`
+nuevo (vidas placeholder, `_max_lives=20`, resetea por ronda, delta de
+`leaked_count` sin tocar `LaneEnemySystem`, sin oro al perder) +
+`SaveManager.state["stage_index"]` (0-4, deliberadamente distinto de
+`player_level`) para que `level_controller.gd` cargue el `LevelDef` que
+corresponda en vez del `preload()` fijo de siempre — ganar avanza y
+encadena al siguiente nivel (o vuelve a `MainMenu` en el último), perder
+reintenta el mismo. Bug real encontrado y corregido en el camino: el guard
+de "TEST: Finalizar ronda" solo chequeaba `ROUND_COMPLETE`, dejaba pisar
+una derrota ya disparada. Verificado de punta a punta — incluida una
+corrida que completa los 5 niveles en secuencia sin jugar ninguno de
+verdad y confirma que `stage_index`/oro terminan exactamente donde
+corresponde. Detalle completo, tabla de verificación y una nota sobre un
+artefacto de prueba (no del juego) en `fase3-ganable-motor.md`.
+
+---
+
+## 8. Dirección fija de disparo — izquierda por default, no el punto más cercano del carril
+
+Pedido del usuario (10-ago): "las torretas no se bien a donde apuntan,
+algunas si apuntan horizontal a la izquierda, pero otras (la mayoria)
+apuntan al centro de la pantalla". Causa: `_place_tower()` (y el equivalente
+en `stress_main.gd::_fixed_dir_for()`) calculaba `fixed_dir` como la
+dirección hacia `LevelDef.nearest_point_on_path(pos)` — el punto más
+cercano del carril, no necesariamente hacia la izquierda. Con carriles en
+L/Z (los 5 niveles de la sección 2), la mayoría de las torres de la zona
+construible termina con el punto más cercano en una esquina del recorrido,
+no en un tramo recto a su misma altura — de ahí que la mayoría pareciera
+apuntar "al centro" en vez de a un lugar predecible.
+
+**Corregido tal como pidió el usuario: `Vector2.LEFT` fijo, sin cálculo.**
+Aplicado en los dos call sites (`level_controller.gd` y `stress_main.gd`,
+que ya documentaba replicar el mismo criterio para no invalidar los
+números de fps medidos con `mode=joint`). `LevelDef.nearest_point_on_path()`
+queda sin llamarse desde ninguno de los dos, pero no se borra — sigue
+siendo un helper de geometría válido por si hace falta para otra cosa.
+Regresión estándar de `Level1.tscn` y `mode=joint` de `stress_main.gd`
+verificadas sin cambios en los números (torres/proyectiles/enemigos
+idénticos al baseline) — el cambio es de dirección, no de cantidad.
+Verificado a ojo con una captura nueva: proyectiles de los tipos sin
+targeting viajando hacia la izquierda de forma consistente.

@@ -113,6 +113,14 @@ var _quit_after: float = -1.0
 var _elapsed: float = 0.0
 var _shots_taken: Dictionary = {}
 var _shot_times: Array = [6.0, 14.0, 30.0]
+## `no-screenshot=1` (mismo nombre que ya usa stress_main.gd) — la lectura
+## síncrona de GPU de _maybe_screenshot() es justo la "Causa 1" que
+## fase2-benchmark-conjunto.md ya diagnosticó como un dip artificial de
+## piso, no costo real de juego (confirma con captura desactivada). Con
+## barridos de resolución el costo de esa lectura escala con el
+## framebuffer, así que sin este flag el piso de una corrida de alta
+## resolución mide la captura, no el juego.
+var _no_screenshot := false
 
 ## Simulación de estrés — 30 torres disparando rápido (DEV_FIRE_RATE_OVERRIDE)
 ## contra un objetivo sostenido de 300 enemigos, midiendo frame time con la
@@ -459,6 +467,9 @@ func _parse_cli_args() -> void:
 				"stress-textures":
 					if parts[1] == "1":
 						_stress_textures = true
+				"no-screenshot":
+					if parts[1] == "1":
+						_no_screenshot = true
 				"backend":
 					# native ya es el default (ver _backend_native) — este
 					# caso queda solo para forzar gdscript en diagnósticos
@@ -674,10 +685,16 @@ func _place_tower(pos: Vector2, tower_type: int = -1) -> bool:
 			return false
 	if _tower_store.is_full():
 		return false
-	var fixed_dir := (_level.nearest_point_on_path(pos) - pos).normalized()
-	if fixed_dir.is_zero_approx():
-		fixed_dir = Vector2.LEFT  # posición degenerada (tower_pos == punto del carril) — no debería pasar en la práctica
-	_tower_store.spawn_typed(pos, tower_type, fixed_dir)
+	# Dirección fija por default: izquierda (pedido del usuario, 10-ago).
+	# Antes apuntaba al punto más cercano del carril
+	# (LevelDef.nearest_point_on_path) — con carriles en L/Z, la mayoría de
+	# las torres terminaba apuntando hacia una esquina del recorrido en vez
+	# de una dirección predecible, y a simple vista se leía como "apunta al
+	# centro de la pantalla". Sin apuntado real todavía (mencionado como
+	# trabajo futuro en typed_render_group.gd), izquierda fijo es más
+	# legible que ese cálculo. nearest_point_on_path() queda en LevelDef,
+	# sin llamarse desde acá — sigue siendo un helper de geometría válido.
+	_tower_store.spawn_typed(pos, tower_type, Vector2.LEFT)
 	return true
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -769,7 +786,7 @@ func _random_point_in_path() -> Vector2:
 	return Vector2(randf_range(r.position.x, r.end.x), randf_range(r.position.y, r.end.y))
 
 func _maybe_screenshot() -> void:
-	if DisplayServer.get_name() == "headless":
+	if DisplayServer.get_name() == "headless" or _no_screenshot:
 		return
 	for t in _shot_times:
 		if _elapsed >= t and not _shots_taken.has(t):
