@@ -50,31 +50,52 @@ una decisión de forma/aspecto (le toca a Arte, no es una prueba de costo
 de GPU) más que algo para prototipar acá. Queda anotado para cuando
 Arte lo evalúe, no es parte de esta tarjeta.
 
-## 2. Metodología — la de siempre, con un ajuste importante
+## 2. Metodología — corregida (PM, 10-ago): dos escalones, no uno
 
-Mismo criterio que `fase2-vfx-benchmark.md`: costo unitario → escenario
-real → escalar, nunca saltar al extremo. **El ajuste:** esa vez la
-población de referencia era el pico sintético (×1.2 de T4). Acá **no** —
-la frecuencia de disparo/muerte/DoT depende de mecánica de juego real
-(cadencia real de `TOWER_TYPE_STATS`, no `DEV_FIRE_RATE_OVERRIDE`
-forzado), así que hay que medir contra la población y cadencia que el
-juego de verdad va a producir — **20-24 torres reales, ~2.000-2.400
-enemigos, fire_rate sin pisar.** El escenario de 100 torres/cadencia
-forzada (`fase2-benchmark-conjunto.md` secciones 13-16) fue diseñado para
-encontrar el techo del motor, no para representar cuántas explosiones por
-segundo pasan en una partida real — usarlo acá mediría un caso que no es
-el que importa.
+**Corrección sobre la sección original.** Había propuesto medir solo
+contra 20-24 torres (el objetivo ya validado de Fase 2), descartando el
+escenario de ~100 torres por venir del arnés de estrés diseñado para
+forzar el techo del motor. La PM señaló algo que no separé bien: **100
+torres no es en sí mismo un número patológico — es la escala plausible de
+la última pantalla real**, una vez que la progresión desbloquee
+suficientes slots. Lo patológico de las secciones 13-16 no era la
+*cantidad* de torres, era la **cadencia forzada**
+(`DEV_FIRE_RATE_OVERRIDE` a 0.004s, ~150-400× la real) para empujar
+proyectiles — ese sigue sin corresponder acá. Mezclé las dos cosas, las
+separo:
 
-1. **Costo unitario:** cada efecto solo, pocas instancias, confirmar que
-   se ve y dispara donde corresponde (igual que se hizo con las torretas:
-   sprite-test antes de creer el número).
-2. **Escenario real:** población real de combate (arriba), backend
-   nativo (ya default), dirección fija de disparo (ya implementada) — los
-   4 efectos a la vez, comparado contra el piso ya validado sin VFX en
-   esa misma población.
-3. **Si algo cuesta, aislar cuál** — mismo criterio de siempre, no un
-   número agregado que tape cuál de los 4 es el caro. La quemadura (único
-   sostenido) es la primera sospechosa si algo se mueve.
+1. **Costo unitario:** cada efecto solo, pocas instancias — igual que
+   siempre, sin cambios.
+2. **Escenario cercano — 20-24 torres reales, ~2.000-2.400 enemigos,
+   `fire_rate` sin pisar.** Lo que va a existir primero, y contra lo que
+   la calibración de combate ya en curso va a trabajar.
+3. **Escenario de escala — ~100 torres reales (número de trabajo, no
+   definitivo — puede terminar siendo 50 o más), ~2.000 enemigos,
+   `fire_rate` sin pisar igual, rango real (no `DEV_RANGE_OVERRIDE`).**
+   Ni la cantidad de torres ni la de enemigos se fuerzan — solo se
+   escala la composición manteniendo la cadencia real, que es
+   exactamente lo que estas VFX van a disparar de verdad en el juego
+   final. Corre en paralelo al 2, no en vez de.
+4. **Si algo cuesta en el escalón 3 pero no en el 2** — no es motivo
+   para descartar el efecto, es información para decidir si necesita un
+   límite (ej. tope de instancias simultáneas) antes de llegar a esa
+   escala, mismo espíritu que ya usó `ZONE_FIXED_COUNT` para proyectiles
+   de zona.
+5. **Aislar cuál, no un número agregado** — misma disciplina de siempre.
+
+**Sobre "los enemigos no son tan costosos, es un poco irrelevante"
+(PM) — cierto en general, pero no para el efecto #1 específicamente.**
+Renderizado y simulación de enemigos son baratos (costo por tipo de
+textura, no por instancia — confirmado varias veces ya) y desde que
+recto/perforante/splash dejaron de llamar `_find_nearest_enemy()`
+(`plan-fases.md`, disparo en dirección fija), el costo de targeting que
+sí escalaba con cantidad de enemigos quedó acotado a homing/misil
+solamente — la población de enemigos importa mucho menos hoy que cuando
+se midió por primera vez. **Pero la cantidad de enemigos determina
+directo cuántas "quemaduras" simultáneas puede haber en pantalla** (un
+efecto sostenido por enemigo con DoT activo) — es la única de las 4
+variables de esta tarjeta donde el conteo de enemigos sigue siendo la
+variable que importa medir, no una que se pueda ignorar de entrada.
 
 ## 3. Qué no es esta tarjeta
 
