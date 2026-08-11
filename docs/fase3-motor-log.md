@@ -255,6 +255,25 @@ forma preliminar"). No hay tarjeta, no hay pieza de motor que evaluar
 todavía — lo dejo anotado acá solo para que quede registrado como
 "revisado, correctamente fuera de alcance hoy", no como un olvido.
 
+**Actualización, 10-ago:** el árbol de mejoras (sección 3 de
+`fase3-alcance-v1.md`) ya tiene un frame funcionando — ver sección 5. La
+condición que pausaba esto ("cuando el árbol tenga aunque sea una forma
+preliminar") ya está más cerca de cumplirse; no reabro el guardado yo acá,
+señal para Dirección/PM.
+
+---
+
+## 5. Árbol de talentos — frame implementado
+
+Pedido directo del usuario (10-ago), no una tarjeta de `plan-fases.md`:
+mecanismo de árbol de talentos estilo PoE funcionando de punta a punta
+(datos, render, desbloqueo con gating por prerequisito/costo) —
+deliberadamente sin conectar a combate ni a economía real todavía, eso
+queda para la próxima interacción. Detalle completo, dos bugs reales
+encontrados y corregidos (registro de `class_name` en corridas headless,
+overlap de nodos a la densidad real de 31 nodos) y tabla de verificación en
+`fase3-talentos-motor.md`.
+
 ---
 
 ## 4. Revisión del commit `f0cfa56` (pantalla de inicio + botones de test)

@@ -1,111 +1,132 @@
-# Árbol de talentos — contenido "real" para el frame
+# Fase 3 — árbol de talentos, frame
 
-**Rol:** Dirección de Desarrollo.
-**Fecha:** 09-ago-2026 (ver `game/data/talent_tree_def.gd`, que ya apuntaba
-acá antes de que este documento existiera — "la próxima interacción" era
-esta).
-
-**Antes de diseñar nada, leí el esquema que el equipo ya construyó**
-(`TalentTreeDef`, arreglos paralelos estilo SoA) en vez de inventar uno
-propio — tenía un primer borrador con nodos de doble prerequisito y
-capstones de dos efectos, y los dos rompían contra restricciones reales
-del modelo ya implementado:
-
-- **Un solo padre por nodo** (`parent_ids` es un string, no un array —
-  "árbol simple, no grafo general", comentario explícito en el código). Mi
-  diseño original pedía nodos que necesitaban rango de tronco *y* un nodo
-  hermano a la vez — no entra. Rediseñado a cadenas de un solo padre;
-  sigue leyéndose PoE (tronco → se abre la sub-rama en el nodo donde
-  corresponde), solo que la profundidad la da la cadena en sí, no un
-  prerequisito doble.
-- **Un solo `stat_id`/`modifier_value` por nodo** (arreglos paralelos, no
-  una lista de efectos por nodo). Mis capstones con trade-off (+daño
-  /-cadencia en el mismo nodo) tampoco entraban — quedaron como un único
-  efecto grande en vez de una decisión de doble filo. Anotado como idea
-  para más adelante si el esquema crece a soportar multi-efecto, no para
-  ahora.
-
-Con eso resuelto, generé directamente `game/data/talents_01.tres` con
-contenido real — no una descripción para transcribir a mano.
+**Rol:** Mesa de Developers (Motor).
+**Fecha:** 10-ago-2026.
+**Origen:** pedido directo del usuario — "hace la pantalla de talentos
+(arbol estilo poe)... Solo genera el frame, en la proxima interaccion lo
+configuraremos correctamente en base a notas." Corresponde al sub-alcance
+que `fase3-alcance-v1.md` sección 3 ya había separado como su propio ítem
+grande dentro de Fase 3, sin descomponer en tarjeta de motor hasta ahora.
 
 ---
 
-## 1. Forma del árbol
+## 1. Qué es "el frame" acá
 
-Un `root` ("Núcleo", sin efecto) del que cuelgan 3 troncos — Ofensiva,
-Control, Economía — cada uno con 3 rangos (1 punto c/u) que dan un bonus
-chico y parejo, y de los que cuelgan dos sub-cadenas de 3 nodos cada una,
-más un nodo capstone (costo 2) al final del tronco. **31 nodos en total**
-(1 root + 3 troncos × 10) — suficiente para que el frame tenga líneas de
-conexión y estados reales que probar, sin ser un ejercicio de balance.
+Mecanismo de árbol de talentos funcionando de punta a punta — datos,
+render, desbloqueo, gating por prerequisito y por costo — **desacoplado
+de cuántos nodos existan o qué hagan**. Lo que esta tarjeta
+deliberadamente NO hace, con la misma disciplina de "no calibrar sin que
+lo pidan" que ya usó este proyecto en niveles/máquina de estados:
 
-**Corrección sobre mi propio plan inicial:** iba a apoyarme en que 31
-nodos "obligaran" a resolver scroll/paneo, pero `talent_tree_controller.gd`
-no tiene `Camera2D` ni scroll — es un `CanvasLayer` fijo, mismo criterio
-que `MainMenu.tscn`. No inventé esa necesidad ni le pedí al equipo que la
-resuelva sin que yo la haya verificado: en cambio, calculé las 31
-posiciones para que entren en los 1280×720 reales sin superponerse.
-Verificado con un chequeo de pares (AABB, `NODE_SIZE=150×44`) antes de
-darlo por bueno — cero solapamientos, todos los nodos con margen real
-contra el borde del viewport. Si el árbol final crece mucho más que esto
-por torreta, scroll/paneo sí va a hacer falta — pero esa es una tarjeta
-aparte, no algo que estos 31 nodos resuelvan de rebote.
+- **No conecta ningún efecto a combate.** Cada nodo declara
+  `effect_scope`/`stat_id`/`modifier_value` (ver sección 2) pero nada en
+  `TowerStore`/`TowerSystem` los lee todavía. Aplicar esto es la próxima
+  interacción.
+- **No tiene economía real.** `_points_available` es un placeholder fijo
+  (10) — cuántos puntos da el juego y cuándo sigue siendo "otro contador a
+  calibrar" sin resolver (`fase3-alcance-v1.md` sección 2).
+- **No persiste.** El desbloqueo vive en memoria, muere con el proceso —
+  guardado sigue pausado (`plan-fases.md`).
 
-Dos nodos usan `effect_scope=TOWER_TYPE` en vez de `GLOBAL` (uno en
-Ofensiva sobre perforante, uno en Control sobre lanzallamas) — a propósito,
-para que el frame ejercite las dos rutas de dato que ya expone el schema,
-no solo la global que dominaba el placeholder viejo.
+## 2. Modelo de datos — `TalentTreeDef`
 
-## 2. Convención de valores, para quien conecte esto a combate después
+`game/data/talent_tree_def.gd`: arreglos paralelos (mismo criterio SoA que
+`EnemyStore`/`TowerStore`/`ProjectileStore`, evita sub-recursos anidados en
+el `.tres`, frágiles de escribir a mano sin el editor). Un índice = un
+nodo: `ids`, `display_names`, `positions`, `parent_ids` (`""` = raíz —
+árbol simple, un padre por nodo, no grafo general), `costs`,
+`effect_scopes` (`GLOBAL`/`TOWER_TYPE`), `target_tower_types` (índice de
+`TowerStore.TOWER_TYPE_STATS`, `-1` si `GLOBAL`), `stat_ids`,
+`modifier_values`.
 
-- **Nodos `GLOBAL` sobre un stat multiplicativo** (daño, cadencia, DoT,
-  radio de splash, resistencia elemental, puntos por baja):
-  `modifier_value` es una fracción — `0.05` = +5%, `-0.05` = -5% (mismo
-  criterio que ya usaba el placeholder viejo, `damage_all: 0.05`,
-  `fire_rate_all: -0.05`). Se asume que el sistema de combate suma todos
-  los nodos con el mismo `stat_id` alocados — no está confirmado que ese
-  sumador exista todavía, es la lectura más simple y es la que ya
-  implicaba el placeholder anterior.
-- **Nodos `TOWER_TYPE`**: `modifier_value` es un delta plano sobre el
-  campo real de `TowerStore` (`pierce_hits` → `proj_extra` cuando
-  `proj_type=PIERCE`, `damage` → `TowerStore.damage`) — mismo criterio que
-  ya usaban `flamethrower_2`/`pierce_1` en el placeholder viejo.
-- **`ctrl_deb_1`/`3` y `off_pen_1`/`3`** usan `elemental_resist_reduction_all`
-  con signo positivo (`+0.10` = reduce 10 puntos porcentuales la
-  resistencia enemiga) — no negativo, para no mezclar "resta a la
-  resistencia" con "resta al daño" bajo la misma convención de signo.
-- **`tower_slots_all`** y `off_pen_2`'s `pierce_hits` son conteos, no
-  fracciones — `1.0` = +1 unidad flat, igual que ya hacía `pierce_1` en el
-  placeholder anterior.
-- **`ctrl_capstone` (`vulnerable_dot_dmg_all`)** es un stat con nombre
-  propio, no uno que ya exista en el motor — representa "daño extra contra
-  enemigos con DoT activo" (condición chequeable hoy vía
-  `EnemyStore.dot_time_left > 0`), pero conectarlo es trabajo de combate
-  aparte, no de esta tarjeta — mismo espíritu que el resto del árbol
-  ("plumbing de datos, sin conectar todavía", comentario de
-  `talent_tree_def.gd`).
+**La distinción global/por-torreta que pidió el usuario está en el dato,
+no hardcodeada en la pantalla** — `effect_scopes[i]`/`target_tower_types[i]`
+son campos genéricos, la pantalla no sabe ni le importa cuántos tipos de
+torre existen.
 
-## 3. Las 3 ramas, con qué representan
+## 3. Contenido actual — `talents_01.tres`
 
-- **Ofensiva ("Poder de Fuego"):** daño global + crítico + penetración
-  (reduce resistencia enemiga, +1 blanco para perforante). Capstone
-  "Sobrecarga": +20% daño global, sin la contrapartida de cadencia que
-  tenía mi borrador original — no entraba en un nodo de un solo efecto.
-- **Control ("Dominio del Campo"):** duración/fuerza de DoT + splash +
-  debilitación (resistencia enemiga, duración de DoT, un nodo que
-  potencia lanzallamas específicamente). Capstone "Punto Débil": bonus de
-  daño contra enemigos con DoT activo — el único nodo del árbol pensado
-  para necesitar lógica condicional cuando se conecte de verdad, no solo
-  sumar un stat.
-- **Economía ("Ingeniería"):** puntos por baja + slots de torre +
-  cadencia global (menor cooldown). Capstone "Economía de Guerra": +2
-  slots de torre de una vez.
+31 nodos en 3 ramas desde una raíz común (`root`): ofensiva (`off_*`,
+daño/crítico/perforación), control (`ctrl_*`, DoT/splash/debuffs) y
+economía (`eco_*`, puntos por muerte/slots de torre/cadencia), cada rama
+con tronco de 3 nodos + 2 sub-ramas + capstone. Dos nodos ya usan
+`TOWER_TYPE` en vez de `GLOBAL` (perforante y lanzallamas, los mismos
+ejemplos que dio el usuario). Esto ya no es contenido placeholder de
+prueba — es el árbol real, y el mecanismo de esta tarjeta lo sostiene sin
+cambios de código, que era el objetivo del frame.
 
-## 4. Estado de prueba sugerido para el frame, no un número de diseño
+## 4. Mecánica implementada
 
-Con 31 nodos alcanza para probar los tres estados visuales que un árbol
-real necesita a la vez (asignado / disponible-no-tomado / bloqueado por
-prerequisito) sin necesitar un guion de prueba aparte — alcanza con
-asignar, por ejemplo, el tronco completo de Ofensiva (3) + una sub-rama
-completa (3) + el tronco de Economía a rango 2 (2), y dejar Control sin
-tocar, para ver los tres estados conviviendo.
+- **Estados visuales por nodo:** bloqueado (gris, prerequisito no cumplido
+  o sin puntos), disponible (amarillo, clickeable), desbloqueado (verde,
+  deshabilitado). Prefijo `[G]`/`[T<n>]` en el texto del botón — visible
+  sin pasar el mouse; detalle completo (stat + valor) en `tooltip_text`.
+- **Líneas de prerequisito** (`_draw()` en el nodo raíz de la escena, sin
+  `Camera2D` en esta pantalla — mismas coordenadas que los `Button` del
+  `CanvasLayer`, no hace falta transformar nada): grises si el link no
+  está desbloqueado de los dos lados, verdes si sí.
+- **`_try_unlock(id)`** — único punto de entrada, botón real y flag CLI
+  `unlock=<id>` pasan por acá. Rechaza: ya desbloqueado, id inexistente,
+  prerequisito no cumplido, puntos insuficientes.
+- **Botón "Volver"** → `MainMenu.tscn`, agregado ahí un botón "Talentos"
+  entre "Start" y "Exit".
+
+## 5. Bugs encontrados y corregidos en el camino
+
+**5.1 `class_name TalentTreeDef` no se resolvía en corridas headless
+directas — no era un cuelgue de verdad.** Primera corrida headless tiraba
+`Parse Error: Could not find type "TalentTreeDef"` y el proceso no
+llegaba nunca a salir (mismo síntoma superficial que el cuelgue diagnosticado
+en `fase3-motor-log.md` sección 4, causa distinta esta vez). Un
+`class_name` nuevo necesita que Godot re-escanee el proyecto para
+registrarlo globalmente — no pasa solo — mismo fix que ya documentaba
+`rust-build.md` para extensiones nuevas: una corrida con
+`--editor --quit-after 60` una sola vez. Después de eso, todas las
+corridas headless normales cargan `TalentTreeDef` sin problema.
+
+**5.2 Los nodos se pisaban entre sí con la data real (31 nodos).** El
+ancho de botón que probé primero (150px) asumía separación holgada — la
+data real usa 120px entre hermanos de la misma rama. Visto en una captura
+real (no en teoría): tres columnas de una misma fila superpuestas,
+imposibles de leer. Corregido: `NODE_SIZE` a 104×34, texto del botón
+recortado (`clip_text`) con prefijo corto de alcance en vez de la
+descripción completa (que no entraba a esta densidad ni achicando la
+fuente), detalle completo movido a `tooltip_text`. Verificado de nuevo con
+captura — limpio, sin superposición, en los 31 nodos.
+
+## 6. Verificación
+
+CLI equivalentes a cada interacción real, mismo criterio que el resto del
+proyecto (`level_controller.gd`, `main_menu_controller.gd`): `unlock=<id>`
+(repetible, para probar cadenas), `points=<n>` (override del placeholder,
+primera pasada — order-independent respecto a `unlock=`), `auto-back`
+(equivalente a "Volver"), `screenshot-quit`.
+
+| Caso | Resultado |
+|---|---|
+| Carga limpia, sin argumentos | 0/31 desbloqueados, 10 puntos, sin errores |
+| `unlock=root unlock=off_trunk_1 unlock=off_pen_1 unlock=off_pen_2`, `points=5` | 4/31, 1 punto — coincide con costos (1+1+1+1) |
+| `unlock=eco_capstone` (sin ningún prerequisito de la cadena desbloqueado) | 0/31 — rechazado correctamente, 4 niveles de profundidad |
+| `unlock=bogus` (id inexistente) | `push_error`, sin crash, resto de la ronda sigue normal |
+| `points=0 unlock=root` y `unlock=root points=0` (dos órdenes) | Los dos dan 0/31 — confirma que `points=` no depende del orden en la línea de comandos |
+| `MainMenu.tscn -- auto-talents ...` | Carga `TalentTree.tscn`, procesa el resto de los argumentos ahí |
+| `TalentTree.tscn -- ... auto-back` | Vuelve a `MainMenu.tscn` limpio |
+| Captura de ventana, mezcla de estados (bloqueado/disponible/desbloqueado) | Sin superposición, líneas correctas, prefijos `[G]`/`[T2]`/`[T5]` legibles |
+
+**Nota sobre las herramientas de prueba, no del juego:** `auto-talents` y
+`auto-back` combinados en la misma invocación rebotan indefinidamente
+(cada pantalla vuelve a leer los mismos argumentos de línea de comandos al
+cargar, así que la segunda pantalla dispara la navegación de vuelta, que
+dispara la de ida, etc.) — no es un bug de la navegación real (un click
+real no se "reproduce" solo en la siguiente pantalla), es una propiedad de
+cómo funcionan los flags de CLI acá. Cada transición se probó aislada.
+
+## 7. Qué sigue — no se decide ni se ejecuta acá
+
+Conectar `effect_scope`/`stat_id`/`modifier_value` a `TowerStore`/
+`TowerSystem` real, calibrar `_points_available` y el costo de cada nodo
+contra una economía de progresión de verdad, decidir si el árbol real
+tiene más de un prerequisito por nodo en algún punto (el modelo de datos
+lo soporta con un cambio acotado si hace falta) — todo esto es la "próxima
+interacción en base a notas" que pidió el usuario, no un pendiente
+olvidado.
