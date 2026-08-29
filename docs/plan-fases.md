@@ -702,6 +702,62 @@ vidas de jugador (placeholder), `RoundState.ROUND_LOST` nuevo, y
 punto 1 del alcance) para que `level_controller.gd` cargue el nivel que
 corresponda en vez del `preload()` fijo actual.
 
+**Dirección, 10-ago — propuesta de un consultor externo (costo de fuego
+real + evaluación de migración a 3D), no adoptada.** La PM la reenvió
+pidiendo que la evalúe y reformule para implementar si correspondía. Dos
+problemas independientes, no uno:
+
+1. **El texto nunca se adaptó a este proyecto.** Placeholders sin
+   completar en todo el documento (`[GÉNERO]`, `[N]` torretas, `[X]` ms de
+   presupuesto, hardware target, resolución objetivo) y un requisito
+   inventado que no sale de ningún documento de diseño nuestro ("~200
+   enemigos ardiendo simultáneamente" — la escala que sí usamos, y con
+   otro propósito, es la de `fase3-vfx-exploracion-v1.md`: 2.000-2.400
+   enemigos totales en pantalla, no 200 ardiendo a la vez). Es una
+   plantilla genérica de evaluación de fuego en Godot, no algo escrito
+   contra este código.
+2. **La premisa "si es viable, migramos ya" invierte la disciplina que
+   este documento existe para proteger.** Nunca comprometimos una acción
+   de este tamaño antes de medir — acá el propio texto pre-compromete la
+   migración al resultado de un benchmark de un solo efecto, sin que
+   Dirección/PM vean el costo real primero. Y el costo real es alto y
+   conocido de antemano, no hace falta medir fuego para saberlo:
+   `game/sim/` + `game/rust/` son `Vector2` de punta a punta
+   (`SpatialHash` 2D, `path_rects`, todo `EntityStore`), y la dirección de
+   arte de Fase 2 (`diseno-grafico.md` sección 9) es "vectorial plano de
+   bordes marcados" — sin gradiente, sombreado ni especular — **elegida
+   por ser la más barata posible de GPU, entre otras razones**. El
+   hallazgo que motiva la propuesta (CPU-bound, margen de GPU libre) no es
+   una señal de que haga falta 3D — es la confirmación de que esa decisión
+   de Fase 2 funcionó. Migrar obsoletaría de una vez el pipeline de arte ya
+   validado (`prompts-arte-torretas-v1.md`) y la arquitectura SoA 2D
+   entera — decisión de producto, no algo que deba gatillar un lateral de
+   VFX.
+
+**No evalúo viabilidad de 3D.** Si en algún momento se vuelve una pregunta
+real, entra como decisión de producto explícita de la PM, con el costo
+estimado primero — no como consecuencia de un benchmark de fuego.
+
+**Tampoco adopto el banco de 7 métodos de renderizado (A-G) tal como está
+escrito** — proporción equivocada para este proyecto: shader procedural de
+ruido con LUT, `MultiMeshInstance2D` con datos custom por instancia,
+composición a media resolución vía `SubViewport`, distorsión de calor con
+`BackBufferCopy`, son todas técnicas de sombreado real que van en contra
+de la decisión de Fase 2 ("sin gradiente, sin sombreado, sin especular")
+— no son un problema de costo a resolver, son una dirección de arte
+distinta que nadie propuso ni aprobó. La pregunta de fondo que sí es
+legítima — ¿cuánto cuesta la quemadura sostenida con muchos enemigos
+ardiendo a la vez? — ya está cubierta, a la escala que corresponde a este
+juego, por `fase3-vfx-exploracion-v1.md` (Fases 2 y 3 miden exactamente
+eso, con el placeholder simple que ya corresponde al estilo — nota
+agregada en su sección 5).
+
+**Lo único que rescato:** la disciplina de medición del consultor
+(percentil 99 y no solo promedio, overlay de draw calls/VRAM, modo cámara
+fija reproducible) es buena práctica en general, pero este proyecto ya
+tiene la suya propia (piso "cero muestras bajo 60", no promedio; banco
+reproducible por flags de CLI) y no hace falta reemplazarla por otra.
+
 ---
 
 ## Fase 4 — Arte real

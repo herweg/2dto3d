@@ -175,3 +175,23 @@ placeholder, un shader de tinte) alcanza, igual que se hizo para probar
 sprite de torreta antes de que existiera arte real. No decide todavía si
 estos efectos entran al juego — es dato de costo y de sensación, la
 decisión de adoptarlos es aparte una vez medido.
+
+## 5. Nota — propuesta de un consultor externo sobre fuego/3D (10-ago), no adoptada
+
+La PM recibió una propuesta externa pidiendo un banco de 7 técnicas de
+render de fuego (flipbook, shader procedural de ruido, `MultiMesh`,
+partículas, `SubViewport` a media resolución, distorsión de calor) más una
+evaluación de migración a 3D condicionada a ese resultado. Decisión
+completa y razonada en `plan-fases.md` (Fase 3, 10-ago) — no se adopta:
+contradice la dirección de arte de Fase 2 ("sin gradiente, sin sombreado,
+sin especular", elegida por barata de GPU) y pre-compromete una migración
+de arquitectura antes de que Dirección/PM vean el costo real.
+
+**La pregunta de fondo que sí es legítima — cuánto cuesta la quemadura
+sostenida cuando hay muchos enemigos ardiendo a la vez — ya la responden
+las Fases 2 y 3 de esta misma tarjeta**, con el placeholder simple que
+corresponde al estilo del juego, no con una técnica de sombreado nueva.
+Si Fase 4 (Arte) alguna vez decide que el fuego merece una inversión
+visual mayor, esa evaluación se arma con nuestros propios números
+(resolución, cantidad de torres/enemigos real, restricción de estilo
+plano) — no con una plantilla genérica sin adaptar.
