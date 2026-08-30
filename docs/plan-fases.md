@@ -799,11 +799,32 @@ donde se llevan las decisiones de escala:
   del budget de 16,6ms, pero con ~3,5ms de margen en vez de 9,46ms** — a
   vigilar si se suma costo real de sim/UI más adelante, este test sigue
   siendo solo render. Detalle en `docs/pivot-3d-poc-v1.md` sección 5.
-- **No cierro Fase 3D como fase del proyecto** — sigue siendo POC, en su
-  propia rama, sin afectar `main` ni el trabajo de Fase 3 en curso. Pero la
-  pregunta técnica concreta que motivó esta ronda (¿la escala objetivo con
-  margen es viable en Godot, sin Unreal?) queda contestada que sí, con
-  datos, no con expectativa.
+- **PM, 10-ago — decisión de producto: se pivotea a 3D de verdad, no queda
+  como POC lateral.** Con esto sí cambia el gobierno de este documento:
+
+  1. **La línea 2D previa al pivot queda preservada íntegra en la rama
+     `_ol2d`** (snapshot de `main` justo antes de este merge, pusheada) —
+     nada se borra, nada se pierde, es el punto al que se puede volver si
+     el pivot no funciona.
+  2. **`pivot-3d-poc` se fusionó a `main`** (merge `420740f`) — de acá en
+     más, `main` es la línea de desarrollo del juego en 3D. El juego 2D
+     completo (`game/sim/`, escenas, controladores) sigue presente en el
+     árbol sin tocar — convive hasta que el trabajo de pantallas 3D lo
+     reemplace pieza por pieza, no de un saque.
+  3. **Corrección al registro anterior, no descubierta hasta ahora:** dije
+     en la conversación previa a este pivot que la tarjeta de VFX
+     (`fase3-vfx-exploracion-v1.md`) "nunca se ejecutó" — **eso era
+     incorrecto.** Verificando el código antes de escribir las tarjetas de
+     3D encontré que la **Fase 0 sí se implementó y commiteó**
+     (`cabdb41`, placeholders de quemadura/explosión/chispa/muerte + flags
+     en `level_controller.gd::_setup_vfx()`) — las Fases 1-4 (medición de
+     costo real) nunca se corrieron ni se reportaron. Con el pivot a 3D,
+     esa medición queda sin objeto (el placeholder es 2D) — no se
+     retoma, pasa a ser trabajo heredado de la línea `_ol2d`.
+  4. **Tarjetas para Mesa de Developers (otro agente, no yo) en
+     `docs/fase-3d-tarjetas-pantallas-v1.md`** — reconstruir pantallas
+     reales sobre lo que la POC ya validó (puente de render 3D, niveles,
+     menús, prueba de estrés integrada al juego).
 
 ---
 
