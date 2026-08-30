@@ -895,6 +895,21 @@ existe el checkbox. Un solo valor cambiado en
 `Settings.DEFAULT_STATE`, aplicado por Dirección directamente, no ameritaba
 volver a Mesa de Developers por esto.
 
+**PM, 10-ago — se oficializa el pivot a un proyecto separado.** `/game/`
+acumuló, en capas, el 2D completo más la exploración/pivot de 3D
+construida al lado (sufijos `_3d`, botón "2D (legacy)") — con la decisión
+de pivot ya tomada, cargar ese peso indefinidamente no tiene sentido.
+**`/game3d/docs/towerdefense_3d_manifiesto.md` es el documento fundacional
+de `/game3d/`**, proyecto Godot nuevo y propio, hermano de `/game/` en
+este mismo repositorio (no un reemplazo in-place, no un repo aparte):
+qué se migra tal cual (simulación, hot path en Rust, guardado, el puente
+de render 3D ya probado), con qué nombre (sin sufijo `_3d`, ya no hace
+falta desambiguar de nada), y qué se descarta a propósito (scripts de
+investigación de la POC, el camino 2D completo, assets de prueba nunca
+commiteados). `/game/` no se toca ni se borra — sigue existiendo como
+referencia, junto con `_ol2d`, hasta que `/game3d/` esté confirmado de
+punta a punta.
+
 ## Fase 4 — Arte real
 
 Reemplazo del placeholder de color plano por sprites reales de las 20+
