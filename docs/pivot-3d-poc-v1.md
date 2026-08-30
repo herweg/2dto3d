@@ -132,11 +132,58 @@ costo, que era la que dominaba.
 **Cierra el gap de la sección 3 con margen de sobra.** No hace falta seguir
 buscando otra optimización para esta escala.
 
-## 5. Qué sigue, no decidido acá
+## 5. Caminata real + variedad de textura — pedido de la PM, medido
 
-- Variedad real de texturas/mallas (todo lo medido acá es un solo
-  monstruo repetido) — sabemos por el proyecto 2D que el costo real vive
-  ahí, no en la cantidad de instancias.
+Dos huecos que quedaban: los enemigos posaban quietos (no caminaban), y
+todo lo medido era un solo monstruo repetido (sabíamos por el proyecto 2D
+que el costo real de variedad vive ahí, no en la cantidad de instancias).
+
+- **Caminata:** `walk=1` en `poc_3d_bench.gd` — cada enemigo (`is_enemy`)
+  se mueve en -X a velocidad constante y hace wrap al llegar al borde de
+  la grilla, real movimiento de transform cada frame, no solo animación en
+  el lugar.
+- **Variedad de textura, real, no simulada:** `docs/3d/make_texture_variants.py`
+  genera N PNG con hue-shift real sobre la textura original (archivos
+  distintos, no un tinte de shader). `tex_variants=10` las reparte
+  round-robin, duplicando el material base y reemplazando su textura
+  (mismo mesh/skin compartido — variedad de piel y esqueleto compartido no
+  compiten entre sí). **Las 10 PNG generadas (73MB, ~7,3MB cada una — el
+  hue-shift le gana a la compresión plana del original) no están
+  commiteadas** — regenerables con un comando
+  (`python docs/3d/make_texture_variants.py <textura_original> game/assets3d/monster/variants 10`),
+  no vale duplicar ese peso en el repo para un placeholder de prueba.
+
+**Resultado, escenario oficial completo (120 torres + 2.400 monstruos +
+4.320 proyectiles, esqueleto compartido con 10 maestros):**
+
+| Variante | Piso |
+|---|---|
+| Quieto, sin variedad de textura (sección 4) | 7,14 ms |
+| **+ caminata real** | **13,27 ms** |
+| + caminata + 10 texturas reales | 12,91 ms |
+
+**Sorpresa — caminar cuesta más que animar el esqueleto, y no lo
+esperaba.** De 7,14ms a 13,27ms, ~6,1ms extra por mover 2.400 transforms
+por frame — más que toda la ganancia que dio compartir esqueleto sobre el
+peor caso (18,53→7,14ms redujo 11,4ms; caminar devuelve más de la mitad de
+eso). **Hipótesis razonada, no confirmada con profiler:** cada
+`Node3D.position =` en un nodo con render dispara una actualización al
+`RenderingServer` (transform + AABB de culling); con 2.400 nodos moviéndose
+independientes cada frame, esa es la porción de costo nueva — no medí esto
+con un profiler nativo para confirmarlo a fondo. **Sigue pasando el
+budget** (12,91-13,27ms de 16,6ms) pero con mucho menos margen que la
+versión quieta (3,3-3,7ms libres contra 9,46ms) — vale vigilarlo si se
+suma más costo en paralelo (sim real, UI), porque este test sigue siendo
+solo render.
+
+**Variedad de textura no costó nada medible** (12,91 vs 13,27, dentro del
+ruido) — a diferencia del hallazgo 2D (`fase2-benchmark-conjunto.md`
+sección 11, `TypedRenderGroup`), acá cada enemigo ya era su propio draw
+call de por sí (2.402 sin cambio en las tres filas de la tabla), así que
+la textura no rompe ningún bacheo que no estuviera roto ya.
+
+## 6. Qué sigue, no decidido acá
+
 - Corregir el bug de escala en el pipeline de origen (sección 1) antes de
   generar en volumen.
 - Confirmar del lado de la herramienta si `enable_pbr` se está aplicando
@@ -146,3 +193,6 @@ buscando otra optimización para esta escala.
   repartidas entre miles) — validado acá solo visualmente en chico (30
   instancias, 5 maestros), no a la escala/velocidad de cámara real del
   juego.
+- El costo de caminata (sección 5) queda con hipótesis sin confirmar del
+  todo — si el margen restante (~3,5ms) preocupa más adelante, vale
+  perfilar de verdad en vez de seguir sobre la hipótesis.

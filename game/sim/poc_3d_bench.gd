@@ -23,16 +23,25 @@ extends Node3D
 ##                      que apuntan su `skeleton` a uno de esos <n> por
 ##                      round-robin (mismo mesh/skin, la pose se comparte,
 ##                      la posición no). 0 = comportamiento normal (default).
+##   walk=0|1           enemigos (is_enemy) caminan de verdad (-X, wrap al
+##                      borde) en vez de quedar quietos posando. Default 1.
+##   walk_speed=<f>     unidades/seg de la caminata (default 1.5).
+##   tex_variants=<n>   n texturas reales y distintas (no un tinte en
+##                      shader) repartidas round-robin entre los enemigos —
+##                      generadas con docs/3d/make_texture_variants.py en
+##                      res://assets3d/monster/variants/variant_NN.png.
+##                      0 = todos con la textura original (default).
 
 const PROJ_SCATTER := 12.0
 const PROJ_RADIUS := 0.05
 const PROJ_HEIGHT := 0.3
+const WALK_MARGIN := 2.5
 
 const ASSETS := {
-	"monster_m5": {"path": "res://assets3d/monster/monster_m5.glb", "scale_fix": 0.01},
-	"monster_m7": {"path": "res://assets3d/monster/monster_m7.glb", "scale_fix": 0.01},
-	"monster_pbr_m5": {"path": "res://assets3d/monster/monster_pbr_m5.glb", "scale_fix": 0.01},
-	"tower_m5": {"path": "res://assets3d/tower/tower_m5.glb", "scale_fix": 1.0},
+	"monster_m5": {"path": "res://assets3d/monster/monster_m5.glb", "scale_fix": 0.01, "is_enemy": true},
+	"monster_m7": {"path": "res://assets3d/monster/monster_m7.glb", "scale_fix": 0.01, "is_enemy": true},
+	"monster_pbr_m5": {"path": "res://assets3d/monster/monster_pbr_m5.glb", "scale_fix": 0.01, "is_enemy": true},
+	"tower_m5": {"path": "res://assets3d/tower/tower_m5.glb", "scale_fix": 1.0, "is_enemy": false},
 }
 const GRID_SPACING := 2.5
 const MEASURE_WINDOW := 120
@@ -47,7 +56,13 @@ var _screenshot := false
 var _proj_count := 0
 var _proj_multimesh := true
 var _shared_skel := 0
+var _walk_enabled := true
+var _walk_speed := 1.5
+var _tex_variants := 0
 
+var _grid_cols := 1
+var _walkers: Array = []
+var _variant_materials_cache: Dictionary = {}
 var _total_instances := 0
 var _measuring := false
 var _measured := false
@@ -84,6 +99,12 @@ func _parse_args() -> void:
 				_proj_multimesh = parts[1] == "1"
 			"shared_skel":
 				_shared_skel = int(parts[1])
+			"walk":
+				_walk_enabled = parts[1] == "1"
+			"walk_speed":
+				_walk_speed = float(parts[1])
+			"tex_variants":
+				_tex_variants = int(parts[1])
 
 func _setup_lighting() -> void:
 	var env := WorldEnvironment.new()
@@ -107,6 +128,7 @@ func _spawn_instances() -> void:
 		for c in _counts_override:
 			total_planned += int(c)
 	var cols: int = max(1, int(ceil(sqrt(float(total_planned)))))
+	_grid_cols = cols
 	var idx := 0
 	for li in range(labels.size()):
 		var label = labels[li]
@@ -116,8 +138,9 @@ func _spawn_instances() -> void:
 			push_error("POC3D bench: no se pudo cargar %s" % entry["path"])
 			continue
 		var this_count: int = int(_counts_override[li]) if li < _counts_override.size() else _count
+		var is_enemy: bool = entry.get("is_enemy", false)
 		if _shared_skel > 0 and _anim_enabled:
-			idx = _spawn_shared_skeleton_group(scene, entry["scale_fix"], this_count, cols, idx)
+			idx = _spawn_shared_skeleton_group(scene, entry["scale_fix"], this_count, cols, idx, is_enemy)
 		else:
 			for n in range(this_count):
 				var inst := scene.instantiate()
@@ -132,6 +155,11 @@ func _spawn_instances() -> void:
 					if ap and ap.get_animation_list().size() > 0:
 						ap.play(ap.get_animation_list()[0])
 						ap.seek(randf() * ap.current_animation_length, true)
+				if is_enemy:
+					var mesh_inst := _find_mesh_instance(inst)
+					_apply_texture_variant(mesh_inst, idx)
+					if _walk_enabled:
+						_walkers.append(inst)
 				idx += 1
 	_total_instances = idx
 
@@ -140,7 +168,7 @@ func _spawn_instances() -> void:
 ## como MeshInstance3D livianos: mismo mesh/skin que el maestro, pero
 ## `skeleton` apunta a uno de los maestros por round-robin en vez de tener
 ## esqueleto propio. Devuelve el idx actualizado (para seguir la grilla).
-func _spawn_shared_skeleton_group(scene: PackedScene, s: float, this_count: int, cols: int, start_idx: int) -> int:
+func _spawn_shared_skeleton_group(scene: PackedScene, s: float, this_count: int, cols: int, start_idx: int, is_enemy: bool) -> int:
 	var idx := start_idx
 	var num_masters: int = min(_shared_skel, this_count)
 	var master_skeletons: Array = []
@@ -159,12 +187,16 @@ func _spawn_shared_skeleton_group(scene: PackedScene, s: float, this_count: int,
 			if shared_mesh == null:
 				shared_mesh = mesh_inst.mesh
 				shared_skin = mesh_inst.skin
+			if is_enemy:
+				_apply_texture_variant(mesh_inst, idx)
 		var skel := _find_skeleton(inst)
 		master_skeletons.append(skel)
 		var ap := _find_animation_player(inst)
 		if ap and ap.get_animation_list().size() > 0:
 			ap.play(ap.get_animation_list()[0])
 			ap.seek(float(m) / float(num_masters) * ap.current_animation_length, true)
+		if is_enemy and _walk_enabled:
+			_walkers.append(inst)
 		idx += 1
 
 	var clone_count: int = this_count - num_masters
@@ -180,8 +212,38 @@ func _spawn_shared_skeleton_group(scene: PackedScene, s: float, this_count: int,
 		var master: Skeleton3D = master_skeletons[n % num_masters]
 		if master:
 			mi.skeleton = mi.get_path_to(master)
+		if is_enemy:
+			_apply_texture_variant(mi, idx)
+			if _walk_enabled:
+				_walkers.append(mi)
 		idx += 1
 	return idx
+
+## Reusa una entre _tex_variants texturas reales distintas (round-robin por
+## `idx`) — no un tinte, un archivo de imagen separado, para medir el costo
+## real de variedad como en el proyecto 2D. Sin tex_variants, no toca nada.
+func _apply_texture_variant(mesh_inst: MeshInstance3D, idx: int) -> void:
+	if _tex_variants <= 0 or mesh_inst == null:
+		return
+	var variant_i: int = idx % _tex_variants
+	if _variant_materials_cache.has(variant_i):
+		mesh_inst.set_surface_override_material(0, _variant_materials_cache[variant_i])
+		return
+	var base_mat := mesh_inst.get_active_material(0)
+	if base_mat == null or not (base_mat is StandardMaterial3D):
+		push_warning("POC3D bench: material base no es StandardMaterial3D (%s), tex_variants no se puede aplicar" % [base_mat])
+		return
+	var tex_path := "res://assets3d/monster/variants/variant_%02d.png" % variant_i
+	var tex: Texture2D = load(tex_path)
+	if tex == null:
+		push_error("POC3D bench: no se pudo cargar %s" % tex_path)
+		return
+	var mat: StandardMaterial3D = base_mat.duplicate()
+	mat.albedo_texture = tex
+	if mat.emission_enabled:
+		mat.emission_texture = tex
+	_variant_materials_cache[variant_i] = mat
+	mesh_inst.set_surface_override_material(0, mat)
 
 func _find_mesh_instance(node: Node) -> MeshInstance3D:
 	if node is MeshInstance3D:
@@ -253,7 +315,22 @@ func _setup_camera() -> void:
 	add_child(cam)
 	cam.look_at_from_position(cam_pos, center + Vector3(0.0, 1.0, 0.0), Vector3.UP)
 
+func _update_walkers(delta: float) -> void:
+	if _walkers.is_empty():
+		return
+	var low := -WALK_MARGIN
+	var high: float = float(_grid_cols - 1) * GRID_SPACING + WALK_MARGIN
+	var range_x: float = high - low
+	var step: float = _walk_speed * delta
+	for node in _walkers:
+		var p: Vector3 = node.position
+		p.x -= step
+		if p.x < low:
+			p.x += range_x
+		node.position = p
+
 func _process(delta: float) -> void:
+	_update_walkers(delta)
 	if _measured:
 		return
 	if not _measuring:
@@ -277,8 +354,8 @@ func _report() -> void:
 	var draw_calls := Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
 	var primitives := Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
 	var vmem := Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)
-	print("[poc3d-bench] only=%s count=%d anim=%s instances=%d proj_count=%d proj_mm=%s avg_fps=%.1f floor_fps=%.1f frame_ms_floor=%.2f draw_calls=%d primitives=%d vmem_mb=%.1f" % [
-		_only if _only != "" else "all", _count, str(_anim_enabled), _total_instances, _proj_count, str(_proj_multimesh), avg_fps, floor_fps, (1000.0 / floor_fps), draw_calls, primitives, vmem / 1048576.0
+	print("[poc3d-bench] only=%s count=%d anim=%s walk=%s tex_variants=%d shared_skel=%d instances=%d proj_count=%d proj_mm=%s avg_fps=%.1f floor_fps=%.1f frame_ms_floor=%.2f draw_calls=%d primitives=%d vmem_mb=%.1f" % [
+		_only if _only != "" else "all", _count, str(_anim_enabled), str(_walk_enabled), _tex_variants, _shared_skel, _total_instances, _proj_count, str(_proj_multimesh), avg_fps, floor_fps, (1000.0 / floor_fps), draw_calls, primitives, vmem / 1048576.0
 	])
 	if _screenshot:
 		var dir := DirAccess.open("res://")
