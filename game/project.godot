@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 [autoload]
 
 SaveManager="*res://sim/save_manager.gd"
+StressLaunchConfig="*res://sim/stress_launch_config.gd"
 
 [display]
 

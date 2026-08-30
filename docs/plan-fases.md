@@ -826,7 +826,49 @@ donde se llevan las decisiones de escala:
      reales sobre lo que la POC ya validó (puente de render 3D, niveles,
      menús, prueba de estrés integrada al juego).
 
----
+**Dirección, 10-ago — revisión de las 4 tarjetas, verificada de forma
+independiente, no aceptada de palabra.** Reporte completo de Mesa de
+Developers en `docs/fase-3d-motor-log.md`. Repetí yo mismo los números
+clave (no confié en el reporte) — las 4 tarjetas cierran:
+
+1. **Puente de render 3D — verificado leyendo las 3 clases nuevas**
+   (`entity_render_sync_3d.gd`, `typed_render_group_3d.gd`,
+   `shared_skeleton_render_group.gd`) — el layout del buffer de
+   `MultiMesh` en `TRANSFORM_3D` está bien armado (fila por fila de la
+   matriz 3×4 que Godot espera), el mapeo de coordenadas es consistente en
+   los 3, y `WORLD_SCALE=20.0` es un fix real y necesario, no cosmético.
+2. **Encontré algo que el reporte no marcó — un hueco de método, no un
+   error de datos.** Ninguna de las corridas comparativas fijó `stage=`
+   explícito; `stage_index` quedó en 4 en el save de test (arrastre de la
+   Tarjeta 2, que corre `stage=0..4`). Mi primera corrida de verificación,
+   sin fijar nada, dio 52/120 torres colocadas y ~20ms — un número
+   distinto al reportado, por el nivel equivocado, no por un bug del
+   puente. **Con `stage=0` fijo, reproduje el hallazgo casi exacto:**
+   3D 24,3-25,6ms, 2D 13,3-13,6ms, ambos con las 120 torres reales
+   colocadas — el número del reporte era correcto, el método para
+   llegar a él no estaba blindado contra este estado persistido. Pido que
+   `_setup_stress_test()` (2D y 3D) fije `stage=0` por default si no se
+   pasa explícito, para que esto no vuelva a pasar en silencio.
+3. **Antes de decidir si el Hallazgo 2 bloquea algo, medí el escenario que
+   sí es compromiso real hoy — no el hipotético de escala.** 24 torres/300
+   enemigos (el target de Fase 2, no el ×1,2 de un catálogo que todavía no
+   existe): **5,3-5,5ms, margen enorme.** El problema de 24-25ms es
+   específico de 120/2.400 — exactamente el mismo patrón de decisión que
+   ya usó este proyecto con el spatial hash de `_find_nearest_enemy()`:
+   **no se invierte en optimizar ahora.** Queda anotado con gatillo
+   explícito: si el catálogo real de niveles/progresión se acerca a
+   composiciones de 100+ torres o cientos de enemigos simultáneos de
+   verdad, se vuelve a medir contra esa composición real antes de decidir
+   si hace falta una fase de optimización — no antes.
+4. **Niveles, menús, prueba de estrés — confirmado por mí mismo, no solo
+   por el reporte:** corrí los 5 `stage=0..4` headless (sin error), el
+   diff de `main_menu_controller.gd` es mínimo y limpio tal como describe
+   el reporte, y la cadena completa `MainMenu -- auto-stress
+   auto-launch-official` llega a 120 torres reales sin pasar por CLI de
+   stress-test.
+
+**Las 4 tarjetas quedan cerradas.** Trabajo commiteado por Dirección tras
+la verificación (el reporte no traía commit propio).
 
 ## Fase 4 — Arte real
 

@@ -44,16 +44,40 @@ func _ready() -> void:
 	talents_button.pressed.connect(_on_talents_pressed)
 	layer.add_child(talents_button)
 
+	# Prueba de Estrés (fase-3d-tarjetas-pantallas-v1.md, Tarjeta 4) — antes
+	# solo alcanzable por CLI (poc_3d_bench.gd). Navega a StressMenu.tscn,
+	# que a su vez lanza Level3D.tscn (el camino de render real, Tarjeta 1)
+	# con un preset de población.
+	var stress_button := Button.new()
+	stress_button.text = "Prueba de Estrés"
+	stress_button.position = Vector2(580, 440)
+	stress_button.size = Vector2(140, 44)
+	stress_button.pressed.connect(_on_stress_pressed)
+	layer.add_child(stress_button)
+
+	# Recomendado, no obligatorio (fase-3d-tarjetas-pantallas-v1.md sección
+	# 3): dejar la versión 2D alcanzable mientras se termina de verificar la
+	# 3D — mismo criterio de verificación incremental que ya usó este
+	# proyecto (backend nativo, dirección fija, etc.), punto de comparación
+	# en vez de reemplazo de un saque. Sin estilo especial a propósito —
+	# botón de desarrollo, no una opción real de juego.
+	var legacy_button := Button.new()
+	legacy_button.text = "2D (legacy)"
+	legacy_button.position = Vector2(580, 500)
+	legacy_button.size = Vector2(120, 44)
+	legacy_button.pressed.connect(_on_start_2d_pressed)
+	layer.add_child(legacy_button)
+
 	var exit_button := Button.new()
 	exit_button.text = "Exit"
-	exit_button.position = Vector2(580, 440)
+	exit_button.position = Vector2(580, 560)
 	exit_button.size = Vector2(120, 44)
 	exit_button.pressed.connect(_on_exit_pressed)
 	layer.add_child(exit_button)
 
 	var tabula_rasa_button := Button.new()
 	tabula_rasa_button.text = "Tabula Rasa"
-	tabula_rasa_button.position = Vector2(580, 540)
+	tabula_rasa_button.position = Vector2(580, 660)
 	tabula_rasa_button.size = Vector2(120, 44)
 	tabula_rasa_button.pressed.connect(_on_tabula_rasa_pressed)
 	layer.add_child(tabula_rasa_button)
@@ -85,7 +109,7 @@ func _ready() -> void:
 				img.save_png("res://benchmark_results/mainmenu_screenshot.png")
 				print("[mainmenu] screenshot guardado")
 			get_tree().quit()
-		if arg == "auto-start" or arg == "auto-talents":
+		if arg == "auto-start" or arg == "auto-talents" or arg == "auto-start-2d" or arg == "auto-stress":
 			# Equivalente headless/CLI del click en "Start"/"Talentos" — para
 			# probar la transición de escena real en vez de solo revisarla
 			# por código. Deferido a próximo frame: un click real dispara la
@@ -99,8 +123,14 @@ func _ready() -> void:
 			# combinan estos flags de prueba en la misma invocación sí.
 			await get_tree().process_frame
 			if arg == "auto-start":
-				print("[mainmenu] auto-start: cargando Level1.tscn")
+				print("[mainmenu] auto-start: cargando Level3D.tscn")
 				_on_start_pressed()
+			elif arg == "auto-start-2d":
+				print("[mainmenu] auto-start-2d: cargando Level1.tscn")
+				_on_start_2d_pressed()
+			elif arg == "auto-stress":
+				print("[mainmenu] auto-stress: cargando StressMenu.tscn")
+				_on_stress_pressed()
 			else:
 				print("[mainmenu] auto-talents: cargando TalentTree.tscn")
 				_on_talents_pressed()
@@ -108,8 +138,17 @@ func _ready() -> void:
 
 ## Siempre el primer nivel — no hay selector de pantallas todavía
 ## (fase3-alcance-v1.md sección 2.3, sin tarjeta de motor asignada aún).
+## Apunta a la pantalla 3D real (fase-3d-tarjetas-pantallas-v1.md, Tarjeta
+## 3 — único cambio real de esta tarjeta en este archivo) desde el pivot a
+## 3D; Level1.tscn (2D) sigue existiendo, alcanzable por "2D (legacy)".
 func _on_start_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/Level3D.tscn")
+
+func _on_start_2d_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/Level1.tscn")
+
+func _on_stress_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/StressMenu.tscn")
 
 func _on_talents_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/TalentTree.tscn")
