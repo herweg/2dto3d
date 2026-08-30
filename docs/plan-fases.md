@@ -758,6 +758,31 @@ fija reproducible) es buena práctica en general, pero este proyecto ya
 tiene la suya propia (piso "cero muestras bajo 60", no promedio; banco
 reproducible por flags de CLI) y no hace falta reemplazarla por otra.
 
+**Dirección, 10-ago — actualización: la PM decidió explorar un pivot a 3D
+de verdad (no el consultor de arriba), fuera de este documento hasta
+tener datos.** Checkpoint en branch `pivot-3d-poc` (no en `main`), detalle
+completo en `docs/pivot-3d-poc-v1.md`. Resumen del hallazgo, para que quede
+donde se llevan las decisiones de escala:
+
+- Godot 4 (sin Unreal), cámara fija, pipeline GPT→Meshy→Blender de la PM
+  para modelos 3D. Formato GLB confirmado como el correcto.
+- Bug de escala real encontrado en los assets recibidos (×100), y
+  `meshy-5` gana a `meshy-7` a poly-count igual — ninguno de los dos
+  bloquea nada, son ajustes de pipeline.
+- **El objetivo puro (100 torres, 2.000 enemigos animados, 3.600
+  proyectiles) pasa con margen: 10,74ms de 16,6ms.** Pero **el test
+  oficial con el mismo ×1,2 de margen que este proyecto siempre exigió
+  (120/2.400/4.320) no pasa: 18,53ms.** Causa identificada, no misteriosa:
+  2.400 de los 2.402 draw calls son los enemigos, porque cada uno anima su
+  propio esqueleto y eso impide el bacheo automático que sí ocurre con
+  torres/proyectiles (idénticos, sin animación).
+- Candidato concreto para cerrar ese margen, anotado y no implementado
+  todavía: compartir esqueleto entre variantes de animación (~10 en vez de
+  2.400), usando `MeshInstance3D.skeleton` apuntando a un `Skeleton3D`
+  externo — mecanismo real de Godot, no una apuesta a ciegas.
+- **No cierro nada acá** — el pivot sigue en etapa de POC, en su propia
+  rama, sin afectar `main` ni el trabajo de Fase 3 en curso.
+
 ---
 
 ## Fase 4 — Arte real
