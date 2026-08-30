@@ -1,0 +1,14 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/level_def.gd" id="1_lvl05"]
+
+[resource]
+script = ExtResource("1_lvl05")
+path_rects = Array[Rect2]([Rect2(-640, -370, 860, 120), Rect2(100, -370, 120, 670)])
+waypoints = PackedVector2Array(160, -310, 160, 260)
+obstacles = PackedVector2Array(-500, -270, -420, -350, -320, -270, -220, -350, -100, -270, 0, -350, 80, -270, 130, -150, 190, -50, 130, 80, 190, 180)
+obstacle_radius = 22.0
+buildable_zones = Array[Rect2]([Rect2(260, -370, 300, 670)])
+spawn_point = Vector2(-600, -310)
+goal_point = Vector2(160, 260)
+background_color = Color(0.16, 0.05, 0.03, 1.0)

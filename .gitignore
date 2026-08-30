@@ -4,6 +4,7 @@
 # Salidas del benchmark del spike (CSV/PNG regenerables) — los hallazgos
 # quedan documentados en docs/sprint-02.md, no hace falta versionar los dumps
 game/benchmark_results/
+game3d/benchmark_results/
 
 # Godot 4+ specific ignores
 .godot/
