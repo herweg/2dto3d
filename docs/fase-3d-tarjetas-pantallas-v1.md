@@ -155,7 +155,7 @@ que se pueda lanzar desde el menú real.
 
 ---
 
-## Orden recomendado
+## Orden recomendado (tarjetas 1-4)
 
 **1 primero, siempre** — todo lo demás depende de que el puente de render
 exista. **2 puede correr en paralelo a 1** (no compite por archivos, solo
@@ -164,10 +164,69 @@ no se puede verificar del todo hasta que 1 esté). **3 depende de 1**
 depende de 1** para la versión que vale la pena confiar — puede arrancar
 antes con la salvedad ya anotada arriba.
 
+## Estado de las tarjetas 1-4
+
+**Cerradas y verificadas de forma independiente por Dirección** —
+`docs/fase-3d-motor-log.md` (reporte de Mesa de Developers) y
+`plan-fases.md` (Fase 3, entrada de Dirección 10-ago, con el detalle de
+qué se verificó y el hallazgo del hueco de método con `stage_index`).
+Commit `f191582`, en `main`. Lo que sigue es una tarjeta nueva, no una
+reapertura de esas cuatro.
+
+## 5. Contador de FPS + pantalla de configuración (pedido nuevo de la PM)
+
+Dos piezas chicas, pedidas juntas porque la segunda existe para alojar a
+la primera — no hace falta una pantalla de configuración completa todavía,
+alcanza con que exista el hueco para este control y quede lista para sumar
+más opciones después.
+
+- **Contador de FPS — barato, confirmarlo no medirlo a ciegas.**
+  `Performance.get_monitor(Performance.TIME_FPS)` en un `Label` dentro de
+  un `CanvasLayer`, esquina superior derecha. Un solo nodo de texto
+  actualizado por frame (o cada pocos frames, a criterio de quien lo
+  implemente) no es comparable en costo a nada de lo que este proyecto ya
+  midió (miles de instancias) — no hace falta un banco de prueba dedicado,
+  pero sí confirmar con una captura que la presencia del label no mueve el
+  piso del escenario oficial (`stage=0 stress-test stress-towers=120
+  stress-enemies=2400 real-stats`, la misma vara de siempre) más allá del
+  ruido de medición.
+- **Dónde vive:** recomendado un overlay global (autoload con escena
+  propia, mismo mecanismo que ya usa `StressLaunchConfig` — un autoload
+  puede ser una escena completa, presente en todas las pantallas sin
+  agregarlo a mano en cada una) en vez de duplicarlo en `Level3D.tscn`,
+  `Level1.tscn` y `StressMenu.tscn` por separado. Visible en juego real y
+  en las pruebas de estrés por igual.
+- **Pantalla de configuración nueva** (`Configuración`/`Settings`,
+  alcanzable desde `MainMenu` con un botón más, mismo patrón
+  `Button.new()` de siempre) con un `CheckBox` — "Mostrar FPS" — que
+  prende/apaga el overlay.
+- **Dónde persiste el estado del checkbox — decisión real, no cosmética:**
+  **no** en `SaveManager` (`user://savegame.json` / `savegame_test.json`).
+  Ese archivo es progreso de partida y "Tabula Rasa" lo borra a propósito
+  — una preferencia de visualización no debería desaparecer cuando el
+  jugador reinicia su progreso, son dos cosas distintas (mismo cuidado de
+  vocabulario que ya separó `stage_index` de `player_level`). Un autoload
+  chico aparte (`Settings`, `user://settings.json`, mismo espíritu que
+  `SaveManager` pero sin tocarlo) alcanza — un solo campo por ahora
+  (`show_fps: bool`), con lugar para crecer.
+- **Verificación:** flag CLI `show-fps=1` para forzarlo sin pasar por la
+  pantalla de configuración (mismo criterio de siempre — todo alcanzable
+  por CLI además de por click), captura confirmando el label visible en la
+  esquina superior derecha sin superponerse a HUD existente, apagar/
+  prender vía checkbox y confirmar que persiste entre procesos (mismo
+  patrón que ya probó `fase3-guardado-motor.md` sección 5 para oro/
+  talentos, ahora contra `settings.json` en vez de `savegame.json`), y
+  confirmar que "Tabula Rasa" **no** toca esta preferencia.
+
+**Independiente de las tarjetas 1-4** — no depende de ninguna, puede
+arrancar en cualquier momento.
+
 ## Qué no es esta ronda de tarjetas
 
 No decide arte final (los assets siguen en calidad `meshy-5`, placeholder).
 No corrige el bug de escala del pipeline de origen (`pivot-3d-poc-v1.md`
 sección 6, sigue abierto, no bloquea esto). No conecta los efectos del
 árbol de talentos a combate ni calibra números de juego — eso ya era
-deuda heredada de la línea 2D antes del pivot, sigue siéndolo.
+deuda heredada de la línea 2D antes del pivot, sigue siéndolo. La tarjeta
+5 no diseña una pantalla de configuración completa — solo el hueco mínimo
+para este control.
