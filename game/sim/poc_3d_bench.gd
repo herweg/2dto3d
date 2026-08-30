@@ -16,6 +16,13 @@ extends Node3D
 ##                      este proyecto antes de tener arte real)
 ##   proj_multimesh=0|1 técnica: 1 = un solo MultiMeshInstance3D (default),
 ##                      0 = un MeshInstance3D por proyectil (comparación)
+##   shared_skel=<n>    solo aplica a labels con rig (monster_*): en vez de
+##                      un Skeleton3D+AnimationPlayer independiente por
+##                      instancia, crea <n> "maestros" animados (fases
+##                      repartidas) y el resto son MeshInstance3D livianos
+##                      que apuntan su `skeleton` a uno de esos <n> por
+##                      round-robin (mismo mesh/skin, la pose se comparte,
+##                      la posición no). 0 = comportamiento normal (default).
 
 const PROJ_SCATTER := 12.0
 const PROJ_RADIUS := 0.05
@@ -39,6 +46,7 @@ var _screenshot := false
 
 var _proj_count := 0
 var _proj_multimesh := true
+var _shared_skel := 0
 
 var _total_instances := 0
 var _measuring := false
@@ -74,6 +82,8 @@ func _parse_args() -> void:
 				_proj_count = int(parts[1])
 			"proj_multimesh":
 				_proj_multimesh = parts[1] == "1"
+			"shared_skel":
+				_shared_skel = int(parts[1])
 
 func _setup_lighting() -> void:
 	var env := WorldEnvironment.new()
@@ -106,21 +116,90 @@ func _spawn_instances() -> void:
 			push_error("POC3D bench: no se pudo cargar %s" % entry["path"])
 			continue
 		var this_count: int = int(_counts_override[li]) if li < _counts_override.size() else _count
-		for n in range(this_count):
-			var inst := scene.instantiate()
-			var s: float = entry["scale_fix"]
-			inst.scale = Vector3(s, s, s)
-			var gx: int = idx % cols
-			var gz: int = idx / cols
-			inst.position = Vector3(float(gx) * GRID_SPACING, 0.0, float(gz) * GRID_SPACING)
-			add_child(inst)
-			if _anim_enabled:
-				var ap := _find_animation_player(inst)
-				if ap and ap.get_animation_list().size() > 0:
-					ap.play(ap.get_animation_list()[0])
-					ap.seek(randf() * ap.current_animation_length, true)
-			idx += 1
+		if _shared_skel > 0 and _anim_enabled:
+			idx = _spawn_shared_skeleton_group(scene, entry["scale_fix"], this_count, cols, idx)
+		else:
+			for n in range(this_count):
+				var inst := scene.instantiate()
+				var s: float = entry["scale_fix"]
+				inst.scale = Vector3(s, s, s)
+				var gx: int = idx % cols
+				var gz: int = idx / cols
+				inst.position = Vector3(float(gx) * GRID_SPACING, 0.0, float(gz) * GRID_SPACING)
+				add_child(inst)
+				if _anim_enabled:
+					var ap := _find_animation_player(inst)
+					if ap and ap.get_animation_list().size() > 0:
+						ap.play(ap.get_animation_list()[0])
+						ap.seek(randf() * ap.current_animation_length, true)
+				idx += 1
 	_total_instances = idx
+
+## Crea _shared_skel "maestros" completos (con su propio Skeleton3D +
+## AnimationPlayer, animando a fases repartidas) y el resto de this_count
+## como MeshInstance3D livianos: mismo mesh/skin que el maestro, pero
+## `skeleton` apunta a uno de los maestros por round-robin en vez de tener
+## esqueleto propio. Devuelve el idx actualizado (para seguir la grilla).
+func _spawn_shared_skeleton_group(scene: PackedScene, s: float, this_count: int, cols: int, start_idx: int) -> int:
+	var idx := start_idx
+	var num_masters: int = min(_shared_skel, this_count)
+	var master_skeletons: Array = []
+	var shared_mesh: Mesh = null
+	var shared_skin: Skin = null
+
+	for m in range(num_masters):
+		var inst := scene.instantiate()
+		inst.scale = Vector3(s, s, s)
+		var gx: int = idx % cols
+		var gz: int = idx / cols
+		inst.position = Vector3(float(gx) * GRID_SPACING, 0.0, float(gz) * GRID_SPACING)
+		add_child(inst)
+		var mesh_inst := _find_mesh_instance(inst)
+		if mesh_inst:
+			if shared_mesh == null:
+				shared_mesh = mesh_inst.mesh
+				shared_skin = mesh_inst.skin
+		var skel := _find_skeleton(inst)
+		master_skeletons.append(skel)
+		var ap := _find_animation_player(inst)
+		if ap and ap.get_animation_list().size() > 0:
+			ap.play(ap.get_animation_list()[0])
+			ap.seek(float(m) / float(num_masters) * ap.current_animation_length, true)
+		idx += 1
+
+	var clone_count: int = this_count - num_masters
+	for n in range(clone_count):
+		var mi := MeshInstance3D.new()
+		mi.mesh = shared_mesh
+		mi.skin = shared_skin
+		mi.scale = Vector3(s, s, s)
+		var gx: int = idx % cols
+		var gz: int = idx / cols
+		mi.position = Vector3(float(gx) * GRID_SPACING, 0.0, float(gz) * GRID_SPACING)
+		add_child(mi)
+		var master: Skeleton3D = master_skeletons[n % num_masters]
+		if master:
+			mi.skeleton = mi.get_path_to(master)
+		idx += 1
+	return idx
+
+func _find_mesh_instance(node: Node) -> MeshInstance3D:
+	if node is MeshInstance3D:
+		return node
+	for child in node.get_children():
+		var found := _find_mesh_instance(child)
+		if found:
+			return found
+	return null
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var found := _find_skeleton(child)
+		if found:
+			return found
+	return null
 
 func _spawn_projectiles() -> void:
 	if _proj_count <= 0:

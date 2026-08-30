@@ -88,28 +88,52 @@ porque cada uno tiene su propio estado de animación independiente
 `exploracion-3d.md` (sección 2B) había anotado en agosto: "animación
 esquelética por instancia... es harina de otro costal."
 
-## 4. Idea de la PM para probar después — "bindear" animaciones compartidas
+## 4. Idea de la PM — animaciones compartidas — probada, cierra el gap
 
-Propuesta: en vez de 2.000-2.400 esqueletos independientes, usar ~10
-variantes de animación (mismo clip, distintas fases) y que los enemigos se
-repartan entre esas 10 — "10 cálculos en lugar de 2000".
+Propuesta: en vez de 2.400 esqueletos independientes, usar ~10 variantes
+de animación (mismo clip, distintas fases) y que los enemigos se repartan
+entre esas 10 — "10 cálculos en lugar de 2000".
 
-**Es viable y tiene mecanismo concreto en Godot, no es solo una intuición:**
-`MeshInstance3D.skeleton` acepta un `NodePath` a un `Skeleton3D` externo —
-varias mallas pueden apuntar al mismo esqueleto. Con 10 `Skeleton3D`
-"maestros" (cada uno con su propio `AnimationPlayer` en una fase distinta
-del ciclo de caminata) y 2.400 `MeshInstance3D` repartidos entre esos 10
-por referencia, el cálculo de skinning pasa de 2.400 a 10 — el costo que
-hoy domina la sección 3. **No implementado ni medido todavía** — queda
-anotado como el candidato directo para cerrar el gap de la sección 3, con
-mecanismo real, no una apuesta a ciegas. Riesgo a confirmar cuando se
-pruebe: si mejora draw calls también (no solo el costo de skinning) o si
-hace falta combinarlo con algo más para eso.
+**Implementado en `game/sim/poc_3d_bench.gd` (`shared_skel=<n>`) y medido
+contra el escenario oficial de la sección 3.** `MeshInstance3D.skeleton`
+(`NodePath` a un `Skeleton3D` externo) es el mecanismo real de Godot para
+esto — 10 `Skeleton3D` "maestros" (cada uno con su propio
+`AnimationPlayer`, fases repartidas) más 2.390 `MeshInstance3D` livianos
+(mismo mesh/skin del maestro, sin `Armature` propio) que apuntan a uno de
+los 10 por round-robin.
+
+**Diagnóstico previo a construir, barato (reusa el flag `anim=0` que ya
+existía):** el mismo escenario oficial (120/2.400/4.320) sin animar dio
+13,33ms — contra 18,53ms animando. Esa brecha de 5,2ms es lo que la técnica
+ataca; que el "techo sin animar" ya entrara en el budget (13,33 < 16,6) fue
+la señal de que valía la pena construir la versión real antes de descartar
+o seguir buscando otra cosa.
+
+**Resultado real, escenario oficial completo (120 torres + 2.400
+monstruos + 4.320 proyectiles), 10 maestros:**
+
+| Variante | Piso |
+|---|---|
+| Animación independiente por instancia | 18,53ms — falla |
+| Sin animar (techo teórico) | 13,33ms |
+| **Esqueleto compartido, 10 maestros** | **7,14ms** |
+
+**Mejor que el techo "sin animar" — no solo que "animando normal".**
+Confirmado por qué, no solo observado: el ahorro no es únicamente el
+cálculo de animación — 2.400 instancias completas de la escena
+(`Armature`/`Skeleton3D`/`AnimationPlayer` propios, 26 nodos cada una,
+~62.000 nodos en el árbol) contra 2.390 `MeshInstance3D` sueltos (un nodo
+cada uno) más 10 maestros completos (~2.650 nodos totales) — mantener
+62.000 nodos vivos en el árbol de escena ya costaba, aparte del cálculo de
+animación en sí. Draw calls sin cambio (2.402 en las tres variantes) —
+confirma que esta técnica no toca el draw call, ataca la otra mitad del
+costo, que era la que dominaba.
+
+**Cierra el gap de la sección 3 con margen de sobra.** No hace falta seguir
+buscando otra optimización para esta escala.
 
 ## 5. Qué sigue, no decidido acá
 
-- Probar la idea de la sección 4 contra el escenario oficial de la sección
-  3 — es la prueba que cerraría el gap encontrado.
 - Variedad real de texturas/mallas (todo lo medido acá es un solo
   monstruo repetido) — sabemos por el proyecto 2D que el costo real vive
   ahí, no en la cantidad de instancias.
@@ -117,3 +141,8 @@ hace falta combinarlo con algo más para eso.
   generar en volumen.
 - Confirmar del lado de la herramienta si `enable_pbr` se está aplicando
   de verdad.
+- El esqueleto compartido asume que compartir pose entre instancias no se
+  nota en un tower defense con muchos enemigos en pantalla (10 fases
+  repartidas entre miles) — validado acá solo visualmente en chico (30
+  instancias, 5 maestros), no a la escala/velocidad de cámara real del
+  juego.
