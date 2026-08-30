@@ -776,12 +776,20 @@ donde se llevan las decisiones de escala:
   2.400 de los 2.402 draw calls son los enemigos, porque cada uno anima su
   propio esqueleto y eso impide el bacheo automático que sí ocurre con
   torres/proyectiles (idénticos, sin animación).
-- Candidato concreto para cerrar ese margen, anotado y no implementado
-  todavía: compartir esqueleto entre variantes de animación (~10 en vez de
-  2.400), usando `MeshInstance3D.skeleton` apuntando a un `Skeleton3D`
-  externo — mecanismo real de Godot, no una apuesta a ciegas.
-- **No cierro nada acá** — el pivot sigue en etapa de POC, en su propia
-  rama, sin afectar `main` ni el trabajo de Fase 3 en curso.
+- **Actualización, mismo día — el candidato se implementó y midió, cierra
+  el gap.** Compartir esqueleto entre variantes de animación (10 en vez de
+  2.400, vía `MeshInstance3D.skeleton` apuntando a un `Skeleton3D`
+  externo) llevó el mismo escenario oficial de **18,53ms a 7,14ms** —
+  mejor incluso que el techo teórico sin animar (13,33ms), porque la mayor
+  parte del costo no era animar en sí, era sostener ~62.000 nodos de
+  escena vivos (26 por monstruo × 2.400) contra ~2.650 con la técnica
+  compartida. Draw calls sin cambio (2.402) — confirma que el cuello de
+  botella real nunca fue el draw call.
+- **No cierro Fase 3D como fase del proyecto** — sigue siendo POC, en su
+  propia rama, sin afectar `main` ni el trabajo de Fase 3 en curso. Pero la
+  pregunta técnica concreta que motivó esta ronda (¿la escala objetivo con
+  margen es viable en Godot, sin Unreal?) queda contestada que sí, con
+  datos, no con expectativa.
 
 ---
 
