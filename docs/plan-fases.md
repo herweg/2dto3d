@@ -785,6 +785,20 @@ donde se llevan las decisiones de escala:
   escena vivos (26 por monstruo × 2.400) contra ~2.650 con la técnica
   compartida. Draw calls sin cambio (2.402) — confirma que el cuello de
   botella real nunca fue el draw call.
+- **Actualización, mismo día — pedido de la PM (enemigos caminando de
+  verdad + variedad real de textura), el margen se achica pero sigue
+  pasando.** Con los enemigos moviéndose de verdad (no solo posando) el
+  mismo escenario oficial pasó de 7,14ms a **13,27ms** — sorpresa no
+  esperada: mover 2.400 transforms por frame costó más que animar el
+  esqueleto compartido en sí (hipótesis razonada, no confirmada con
+  profiler: cada nodo con render dispara una actualización de transform/
+  AABB al `RenderingServer`). Sumar 10 texturas reales distintas (no un
+  tinte) no costó nada medible (12,91ms) — cada enemigo ya era su propio
+  draw call, la variedad no rompe ningún bacheo que no estuviera roto ya
+  (a diferencia del hallazgo 2D con `TypedRenderGroup`). **Sigue dentro
+  del budget de 16,6ms, pero con ~3,5ms de margen en vez de 9,46ms** — a
+  vigilar si se suma costo real de sim/UI más adelante, este test sigue
+  siendo solo render. Detalle en `docs/pivot-3d-poc-v1.md` sección 5.
 - **No cierro Fase 3D como fase del proyecto** — sigue siendo POC, en su
   propia rama, sin afectar `main` ni el trabajo de Fase 3 en curso. Pero la
   pregunta técnica concreta que motivó esta ronda (¿la escala objetivo con
