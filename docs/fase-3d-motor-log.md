@@ -196,7 +196,61 @@ rama 2D mientras conviven):
   queda anotado para cuando Arte defina el eje "adelante" real de cada
   malla.
 
-## 6. Qué no decide este documento
+## 6. Tarjeta 5 — contador de FPS + pantalla de configuración
+
+Independiente de las 1-4, ejecutada aparte (commit `6576f5c` de Dirección
+la agregó como pedido nuevo de la PM, marcando 1-4 cerradas y verificadas).
+
+**Piezas:**
+- `game/sim/settings.gd` (autoload `Settings`) — mismo patrón de
+  `save_manager.gd` (JSON en `user://`, merge sobre default, separación
+  test/real por presencia de argumentos de CLI), pero **archivo aparte**
+  de `SaveManager` a propósito: `show_fps` es una preferencia de UI, no
+  progreso de partida, y "Tabula Rasa" no debe tocarla.
+- `game/sim/fps_overlay.gd` + `scenes/FpsOverlay.tscn` (autoload-escena,
+  mismo mecanismo que `StressLaunchConfig` pero con nodo propio en vez de
+  solo datos) — `CanvasLayer` en `layer=100` (por encima del HUD de
+  cualquier pantalla) con un `Label` en la esquina superior derecha,
+  refrescado cada 0,25s desde `Performance.get_monitor(Performance.TIME_FPS)`.
+  Vive fuera del árbol de la escena actual — presente en las 6 pantallas
+  (`MainMenu`, `Level3D`, `Level1`, `StressMenu`, `TalentTree`,
+  `ConfigMenu`) sin tocar ninguna de ellas.
+- `game/sim/config_menu_controller.gd` + `scenes/ConfigMenu.tscn` — un
+  `CheckBox` ("Mostrar FPS") y un botón "Volver", nada más, tal como pedía
+  la tarjeta ("no una pantalla de configuración completa"). Alcanzable
+  desde `MainMenu` con un botón nuevo ("Configuración").
+- CLI: `show-fps=1`/`show-fps=0` fuerza el estado en memoria (no persiste,
+  mismo criterio que otros overrides de este proyecto, ej. `lives=`).
+
+**Reposicioné los botones de MainMenu** (300→630 en vez de 320→660, paso
+de 50px en vez de 60px) — con los 2 botones nuevos de esta tarjeta más el
+de la Tarjeta 4, el espaciado original se salía de los 720px de alto del
+viewport (`project.godot`); confirmado por captura que los 7 entran ahora
+sin solaparse ni cortarse.
+
+**Verificación, los 4 puntos que pedía la tarjeta:**
+- **Captura con el label visible, sin superponerse al HUD existente** —
+  confirmado (`Level3D`, esquina superior derecha, HUD de ronda queda en
+  la izquierda).
+- **Costo contra el escenario oficial, no dado por sentado:** corrí
+  `stage=0 stress-test stress-towers=120 stress-enemies=2400 real-stats`
+  con el overlay prendido y apagado (`show-fps=0`) — ~24,3ms estable en
+  los dos casos (24,28-24,61 vs 23,87-24,39), la diferencia está dentro
+  del ruido de medición. Confirmado, no asumido.
+- **Persistencia entre procesos:** togglear el checkbox escribe
+  `settings_test.json` (`{"show_fps":false}`); un proceso nuevo, sin
+  ningún flag de override, carga ese valor y el label queda oculto —
+  confirmado por captura en un proceso separado del que hizo el toggle
+  (no en memoria del mismo run).
+- **"Tabula Rasa" no toca `settings_test.json`:** confirmado — solo
+  `savegame_test.json` cambia, `settings_test.json` queda intacto.
+
+Default de `show_fps`: `true` (visible de entrada) — no lo especificaba
+la tarjeta, elegí que sirva de entrada dado que el pedido es justamente
+tener el número a mano; si Dirección prefiere opt-in en vez de opt-out,
+es un solo valor en `Settings.DEFAULT_STATE`.
+
+## 7. Qué no decide este documento
 
 No decide si el Hallazgo 2 (piso ~24-25ms en el escenario oficial,
 integrado) bloquea algo — es dato para que Dirección lo evalúe contra el

@@ -30,17 +30,20 @@ func _ready() -> void:
 	layer.add_child(_status_label)
 	_refresh_status()
 
+	# Viewport de 720px de alto (project.godot) — 7 botones no entran con el
+	# espaciado de 60px original sin salirse de pantalla, achicado a 50px
+	# (más el hueco de sobra antes de Tabula Rasa, ver abajo).
 	var start_button := Button.new()
 	start_button.text = "Start"
-	start_button.position = Vector2(580, 320)
-	start_button.size = Vector2(120, 44)
+	start_button.position = Vector2(580, 300)
+	start_button.size = Vector2(140, 44)
 	start_button.pressed.connect(_on_start_pressed)
 	layer.add_child(start_button)
 
 	var talents_button := Button.new()
 	talents_button.text = "Talentos"
-	talents_button.position = Vector2(580, 380)
-	talents_button.size = Vector2(120, 44)
+	talents_button.position = Vector2(580, 350)
+	talents_button.size = Vector2(140, 44)
 	talents_button.pressed.connect(_on_talents_pressed)
 	layer.add_child(talents_button)
 
@@ -50,7 +53,7 @@ func _ready() -> void:
 	# con un preset de población.
 	var stress_button := Button.new()
 	stress_button.text = "Prueba de Estrés"
-	stress_button.position = Vector2(580, 440)
+	stress_button.position = Vector2(580, 400)
 	stress_button.size = Vector2(140, 44)
 	stress_button.pressed.connect(_on_stress_pressed)
 	layer.add_child(stress_button)
@@ -63,22 +66,31 @@ func _ready() -> void:
 	# botón de desarrollo, no una opción real de juego.
 	var legacy_button := Button.new()
 	legacy_button.text = "2D (legacy)"
-	legacy_button.position = Vector2(580, 500)
-	legacy_button.size = Vector2(120, 44)
+	legacy_button.position = Vector2(580, 450)
+	legacy_button.size = Vector2(140, 44)
 	legacy_button.pressed.connect(_on_start_2d_pressed)
 	layer.add_child(legacy_button)
 
+	# Configuración (fase-3d-tarjetas-pantallas-v1.md, Tarjeta 5) — hueco
+	# mínimo para "Mostrar FPS", con lugar para crecer.
+	var config_button := Button.new()
+	config_button.text = "Configuración"
+	config_button.position = Vector2(580, 500)
+	config_button.size = Vector2(140, 44)
+	config_button.pressed.connect(_on_config_pressed)
+	layer.add_child(config_button)
+
 	var exit_button := Button.new()
 	exit_button.text = "Exit"
-	exit_button.position = Vector2(580, 560)
-	exit_button.size = Vector2(120, 44)
+	exit_button.position = Vector2(580, 550)
+	exit_button.size = Vector2(140, 44)
 	exit_button.pressed.connect(_on_exit_pressed)
 	layer.add_child(exit_button)
 
 	var tabula_rasa_button := Button.new()
 	tabula_rasa_button.text = "Tabula Rasa"
-	tabula_rasa_button.position = Vector2(580, 660)
-	tabula_rasa_button.size = Vector2(120, 44)
+	tabula_rasa_button.position = Vector2(580, 630)
+	tabula_rasa_button.size = Vector2(140, 44)
 	tabula_rasa_button.pressed.connect(_on_tabula_rasa_pressed)
 	layer.add_child(tabula_rasa_button)
 
@@ -109,7 +121,7 @@ func _ready() -> void:
 				img.save_png("res://benchmark_results/mainmenu_screenshot.png")
 				print("[mainmenu] screenshot guardado")
 			get_tree().quit()
-		if arg == "auto-start" or arg == "auto-talents" or arg == "auto-start-2d" or arg == "auto-stress":
+		if arg == "auto-start" or arg == "auto-talents" or arg == "auto-start-2d" or arg == "auto-stress" or arg == "auto-config":
 			# Equivalente headless/CLI del click en "Start"/"Talentos" — para
 			# probar la transición de escena real en vez de solo revisarla
 			# por código. Deferido a próximo frame: un click real dispara la
@@ -131,6 +143,9 @@ func _ready() -> void:
 			elif arg == "auto-stress":
 				print("[mainmenu] auto-stress: cargando StressMenu.tscn")
 				_on_stress_pressed()
+			elif arg == "auto-config":
+				print("[mainmenu] auto-config: cargando ConfigMenu.tscn")
+				_on_config_pressed()
 			else:
 				print("[mainmenu] auto-talents: cargando TalentTree.tscn")
 				_on_talents_pressed()
@@ -149,6 +164,9 @@ func _on_start_2d_pressed() -> void:
 
 func _on_stress_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/StressMenu.tscn")
+
+func _on_config_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/ConfigMenu.tscn")
 
 func _on_talents_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/TalentTree.tscn")

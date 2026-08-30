@@ -870,6 +870,31 @@ clave (no confié en el reporte) — las 4 tarjetas cierran:
 **Las 4 tarjetas quedan cerradas.** Trabajo commiteado por Dirección tras
 la verificación (el reporte no traía commit propio).
 
+**Dirección, 10-ago — Tarjeta 5 (contador de FPS + Configuración),
+verificada y cerrada.** Repetí los 4 puntos de verificación yo mismo, no
+solo leí el reporte (`docs/fase-3d-motor-log.md` sección 6):
+
+- Costo del overlay contra el escenario oficial (120/2.400, `real-stats`):
+  corrí los dos casos (`show-fps=1`/`show-fps=0`) — 23,6-23,8ms vs
+  23,8-25,2ms, dentro del ruido de corrida a corrida. Confirmado, no
+  asumido.
+- Persistencia entre procesos: togglear vía CLI (`toggle-show-fps`) contra
+  `ConfigMenu.tscn`, un proceso nuevo separado leyó el mismo valor.
+  Confirmado.
+- "Tabula Rasa" no toca `settings_test.json` — confirmado en código
+  (`wipe_all_data()` solo referencia su propio `state`/`save_path`) y en
+  vivo (corrida con `tabula-rasa`, el archivo de settings no cambió).
+- Layout de los 7 botones del menú — cabe en 720px, confirmado por lectura
+  del diff (última posición 630+44=674).
+
+**Decido el único punto que la tarjeta dejaba abierto:** `show_fps`
+default **`false`** (opt-in), no `true` como lo dejó Mesa de Developers.
+Un contador de FPS es una herramienta de diagnóstico, no algo que un
+tower-defense shippeado muestra sin que el jugador lo pida — para eso
+existe el checkbox. Un solo valor cambiado en
+`Settings.DEFAULT_STATE`, aplicado por Dirección directamente, no ameritaba
+volver a Mesa de Developers por esto.
+
 ## Fase 4 — Arte real
 
 Reemplazo del placeholder de color plano por sprites reales de las 20+
